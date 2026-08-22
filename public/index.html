@@ -336,6 +336,7 @@ const I18N = {
     statePrefix: '状态：',
     resLimited: '濒危', resAdequate: '凑合', resSolid: '耐刷', resStrong: '强化', resExceptional: '满状态',
     noDataShort: '暂无数据', scoreSuffix: '分',
+    bandOptimal: '优秀', bandGood: '良好', bandFair: '一般', bandAttention: '需关注',
     trend7d: '7天', trend14d: '14天', trendInsufficientData: '数据不足，暂无法绘制趋势',
     legendHrv: '平均HRV', legendRhr: '静息心率', trendBaselineNote: '虚线 = 个人历史均值基准',
     batteryHigh: '电量充沛', batteryMid: '电量持平', batteryLow: '电量偏低',
@@ -390,6 +391,7 @@ const I18N = {
     statePrefix: 'Status: ',
     resLimited: 'Critical', resAdequate: 'Stable', resSolid: 'Grindable', resStrong: 'Buffed', resExceptional: 'Full HP',
     noDataShort: 'No data', scoreSuffix: ' pts',
+    bandOptimal: 'Optimal', bandGood: 'Good', bandFair: 'Fair', bandAttention: 'Pay Attention',
     trend7d: '7d', trend14d: '14d', trendInsufficientData: 'Not enough data to chart a trend yet',
     legendHrv: 'Avg HRV', legendRhr: 'Resting HR', trendBaselineNote: 'Dashed line = personal historical average',
     batteryHigh: 'Well Charged', batteryMid: 'Steady', batteryLow: 'Low Battery',
@@ -574,6 +576,14 @@ function radarChartSVG(dims, size){
   </svg>`;
 }
 
+// Oura's own published score bands, so a bare number doesn't leave the reader guessing "is 66 good?"
+function scoreBand(v){
+  if(v >= 85) return t('bandOptimal');
+  if(v >= 70) return t('bandGood');
+  if(v >= 60) return t('bandFair');
+  return t('bandAttention');
+}
+
 function renderOuraOverview(){
   const el = document.getElementById('ouraOverviewCard');
   const row = latestRowWithFields(['Sleep Score','Readiness Score','Activity Score']);
@@ -594,18 +604,18 @@ function renderOuraOverview(){
   ];
   const tag = resilience ? `<span class="stage-badge stage-offer" style="margin-left:8px;">${t('statePrefix')}${resilienceLabel(resilience) || row['Resilience Level']}</span>` : '';
   const detailChips = [
-    [t('dimSleep'), `${sleepScore}${t('scoreSuffix')}`],
-    [t('dimReadiness'), `${readinessScore}${t('scoreSuffix')}`],
-    [t('dimActivity'), `${activityScore}${t('scoreSuffix')}`],
-    [t('dimStress'), stressContributor !== null ? `${Math.round(stressContributor)}${t('scoreSuffix')}` : t('noDataShort')],
-    [t('dimSpo2'), spo2Score !== null ? `${Math.round(spo2Score)}${t('scoreSuffix')}` : t('noDataShort')]
+    [t('dimSleep'), sleepScore],
+    [t('dimReadiness'), readinessScore],
+    [t('dimActivity'), activityScore],
+    [t('dimStress'), stressContributor !== null ? Math.round(stressContributor) : null],
+    [t('dimSpo2'), spo2Score !== null ? Math.round(spo2Score) : null]
   ];
   el.innerHTML = `
     <div style="font-weight:700; font-size:14.5px; margin-bottom:4px;">${escapeHtml(row['Date'])}${tag}</div>
     <div style="display:flex; justify-content:center;">${radarChartSVG(dims, 260)}</div>
     <div style="font-size:11px; color:var(--sub); text-align:center; margin:2px 0 10px;">${t('radarRefNote')}</div>
     <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:6px;">
-      ${detailChips.map(([k,v]) => `<span class="chip" style="font-size:11.5px;">${escapeHtml(k)} ${escapeHtml(v)}</span>`).join('')}
+      ${detailChips.map(([k,v]) => `<span class="chip" style="font-size:11.5px;">${escapeHtml(k)} ${v !== null ? escapeHtml(`${v}${t('scoreSuffix')} · ${scoreBand(v)}`) : t('noDataShort')}</span>`).join('')}
     </div>
   `;
 }
