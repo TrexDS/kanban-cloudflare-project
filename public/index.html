@@ -422,8 +422,8 @@ function renderOuraOverview(){
     ['睡眠', `${sleepScore}分`],
     ['恢复', `${readinessScore}分`],
     ['活动', `${activityScore}分`],
-    ['压力韧性', stressContributor !== null ? `Stress Contributor ${stressContributor} → ${Math.round(stressContributor)}分` : '暂无数据'],
-    ['血氧', spo2 !== null ? `${spo2}% → 约${Math.round(spo2Score)}分` : '暂无数据']
+    ['压力韧性', stressContributor !== null ? `${Math.round(stressContributor)}分` : '暂无数据'],
+    ['血氧', spo2Score !== null ? `${Math.round(spo2Score)}分` : '暂无数据']
   ];
   el.innerHTML = `
     <div style="font-weight:700; font-size:14.5px; margin-bottom:4px;">${escapeHtml(row['Date'])}${tag}</div>
@@ -448,19 +448,29 @@ function smoothPath(points){
   return d;
 }
 
-function dualLineChartSVG(labels, seriesA, seriesB){
-  const w = 300, h = 120, padX = 8, padY = 14;
-  const scale = arr => {
-    const min = Math.min(...arr), max = Math.max(...arr), range = (max - min) || 1;
-    return arr.map(v => h - padY - ((v - min) / range) * (h - padY*2));
+function average(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
+
+function dualLineChartSVG(labels, seriesA, seriesB, baselineA, baselineB){
+  const w = 300, h = 92, padX = 10, padY = 8, labelY = h + 12;
+  const scaleFor = (arr, base) => {
+    const all = (base !== null && base !== undefined) ? [...arr, base] : arr;
+    const min = Math.min(...all), max = Math.max(...all), range = (max - min) || 1;
+    return v => h - padY - ((v - min) / range) * (h - padY*2);
   };
-  const ys1 = scale(seriesA), ys2 = scale(seriesB);
+  const toY1 = scaleFor(seriesA, baselineA);
+  const toY2 = scaleFor(seriesB, baselineB);
   const stepX = labels.length > 1 ? (w - padX*2) / (labels.length - 1) : 0;
-  const pts1 = ys1.map((y,i) => [padX + i*stepX, y]);
-  const pts2 = ys2.map((y,i) => [padX + i*stepX, y]);
-  const labelEls = labels.map((l,i) => (i===0 || i===labels.length-1 || i===Math.floor(labels.length/2))
-    ? `<text x="${padX+i*stepX}" y="${h-1}" font-size="9.5" fill="#8a8578" text-anchor="middle">${escapeHtml(l)}</text>` : '').join('');
-  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:auto; display:block;">
+  const pts1 = seriesA.map((v,i) => [padX + i*stepX, toY1(v)]);
+  const pts2 = seriesB.map((v,i) => [padX + i*stepX, toY2(v)]);
+  const base1 = (baselineA !== null && baselineA !== undefined)
+    ? `<line x1="${padX}" y1="${toY1(baselineA)}" x2="${w-padX}" y2="${toY1(baselineA)}" stroke="#3d6b5c" stroke-width="1" stroke-dasharray="4 3" opacity="0.55"/>` : '';
+  const base2 = (baselineB !== null && baselineB !== undefined)
+    ? `<line x1="${padX}" y1="${toY2(baselineB)}" x2="${w-padX}" y2="${toY2(baselineB)}" stroke="#c1573f" stroke-width="1" stroke-dasharray="4 3" opacity="0.55"/>` : '';
+  const fontSize = labels.length > 10 ? 7 : 8.5;
+  const labelEls = labels.map((l,i) =>
+    `<text x="${padX+i*stepX}" y="${labelY}" font-size="${fontSize}" fill="#8a8578" text-anchor="middle">${escapeHtml(l)}</text>`).join('');
+  return `<svg viewBox="0 0 ${w} ${labelY+4}" style="width:100%; height:auto; display:block;">
+    ${base1}${base2}
     <path d="${smoothPath(pts1)}" fill="none" stroke="#3d6b5c" stroke-width="2"/>
     <path d="${smoothPath(pts2)}" fill="none" stroke="#c1573f" stroke-width="2"/>
     ${labelEls}
@@ -479,12 +489,17 @@ function renderOuraTrend(range){
   if(rows.length < 2){ el.innerHTML = tabsHtml + '<div class="empty">数据不足，暂无法绘制趋势</div>'; return; }
   const hrv = rows.map(r => num(r['Avg HRV']));
   const rhr = rows.map(r => num(r['Avg Resting HR']));
-  const dates = rows.map(r => r['Date'].slice(5));
-  el.innerHTML = tabsHtml + dualLineChartSVG(dates, hrv, rhr) +
-    `<div style="display:flex; gap:16px; margin-top:8px; font-size:12px; color:var(--sub);">
+  const dates = rows.map(r => r['Date'].slice(8));
+  const allHrv = ouraRows.map(r => num(r['Avg HRV'])).filter(v => v !== null);
+  const allRhr = ouraRows.map(r => num(r['Avg Resting HR'])).filter(v => v !== null);
+  const baselineHrv = average(allHrv);
+  const baselineRhr = average(allRhr);
+  el.innerHTML = tabsHtml + dualLineChartSVG(dates, hrv, rhr, baselineHrv, baselineRhr) +
+    `<div style="display:flex; gap:16px; margin-top:6px; font-size:12px; color:var(--sub);">
       <span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3d6b5c; margin-right:4px;"></span>平均HRV ${hrv[hrv.length-1]}ms</span>
       <span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#c1573f; margin-right:4px;"></span>静息心率 ${rhr[rhr.length-1]}bpm</span>
-    </div>`;
+    </div>
+    <div style="font-size:11px; color:var(--sub); margin-top:4px;">虚线 = 个人历史均值基准</div>`;
 }
 
 function ringSVG(pct, size, color, label){
