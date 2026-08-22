@@ -786,17 +786,30 @@ async function loadOuraAnalysis(){
   }catch(e){ console.error('oura analysis fetch failed', e); ouraAnalysisRows = OURA_ANALYSIS_SNAPSHOT; }
   renderOuraAnalysisCard('day');
 }
+// Robust to how the model actually phrases headings: with/without "评级"/"维度",
+// with/without markdown ** bold, with/without a "今日/下阶段" prefix on the action heading.
 function parseAiSummary(text){
   if(!text) return null;
-  const ratingMatch = text.match(/核心状态评级[：:]\s*([^\n]+)/);
-  const warnMatch = text.match(/异常维度预警[^：:]*[：:]?\s*([\s\S]*?)(?=(今日|下阶段|高优先级行动)|$)/);
-  const actionMatch = text.match(/(今日\/?下阶段高优先级行动|高优先级行动|行动建议)[^：:]*[：:]?\s*([\s\S]*)$/);
-  if(!ratingMatch && !warnMatch && !actionMatch) return null;
-  return {
-    rating: ratingMatch ? ratingMatch[1].trim() : '',
-    warnings: warnMatch ? warnMatch[1].trim() : '',
-    actions: actionMatch ? actionMatch[2].trim() : ''
-  };
+  const clean = text.replace(/\*\*/g, '');
+  const headingRe = /(核心状态(?:评级)?|异常(?:维度)?预警|(?:今日\/?下阶段)?高优先级行动|行动建议|行动)\s*[：:]/g;
+  const matches = [];
+  let m;
+  while((m = headingRe.exec(clean)) !== null){
+    matches.push({ heading: m[1], index: m.index, contentStart: m.index + m[0].length });
+  }
+  if(!matches.length) return null;
+  const sections = {};
+  for(let i=0;i<matches.length;i++){
+    const end = i+1 < matches.length ? matches[i+1].index : clean.length;
+    let content = clean.slice(matches[i].contentStart, end);
+    content = content.replace(/\s*-\s*$/, '').trim(); // strip a trailing bullet dash belonging to the next heading
+    const h = matches[i].heading;
+    if(h.indexOf('核心状态') === 0) sections.rating = content;
+    else if(h.indexOf('异常') === 0) sections.warnings = content;
+    else sections.actions = content;
+  }
+  if(!sections.rating && !sections.warnings && !sections.actions) return null;
+  return { rating: sections.rating || '', warnings: sections.warnings || '', actions: sections.actions || '' };
 }
 
 function renderOuraAnalysisCard(period){
