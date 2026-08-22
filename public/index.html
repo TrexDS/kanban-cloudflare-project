@@ -583,6 +583,11 @@ function scoreBand(v){
   if(v >= 60) return t('bandFair');
   return t('bandAttention');
 }
+function bandStyle(v){
+  if(v >= 70) return 'background:var(--active-bg); color:var(--active); border-color:transparent; font-weight:600;';
+  if(v >= 60) return 'background:var(--watch-bg); color:var(--watch); border-color:transparent; font-weight:600;';
+  return 'background:#f7e3dd; color:var(--accent); border-color:transparent; font-weight:600;';
+}
 
 function renderOuraOverview(){
   const el = document.getElementById('ouraOverviewCard');
@@ -615,7 +620,7 @@ function renderOuraOverview(){
     <div style="display:flex; justify-content:center;">${radarChartSVG(dims, 260)}</div>
     <div style="font-size:11px; color:var(--sub); text-align:center; margin:2px 0 10px;">${t('radarRefNote')}</div>
     <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:6px;">
-      ${detailChips.map(([k,v]) => `<span class="chip" style="font-size:11.5px;">${escapeHtml(k)} · ${v !== null ? escapeHtml(scoreBand(v)) : t('noDataShort')}</span>`).join('')}
+      ${detailChips.map(([k,v]) => `<span class="chip" style="font-size:11.5px; ${v !== null ? bandStyle(v) : ''}">${escapeHtml(k)} · ${v !== null ? escapeHtml(scoreBand(v)) : t('noDataShort')}</span>`).join('')}
     </div>
   `;
 }
