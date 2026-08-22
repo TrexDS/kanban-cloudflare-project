@@ -246,8 +246,12 @@
   <!-- DASHBOARD VIEW -->
   <div class="view" id="view-dash">
     <div class="progress-card" id="farewellProgressCard"></div>
-    <div class="dash-section-title">💍 昨日身体状态（Oura）</div>
-    <div class="progress-card" id="ouraCard">加载中…</div>
+    <div class="dash-section-title">💍 健康总览（Oura）</div>
+    <div class="progress-card" id="ouraOverviewCard">加载中…</div>
+    <div class="dash-section-title">📈 关键趋势（HRV / 静息心率）</div>
+    <div class="progress-card" id="ouraTrendCard">加载中…</div>
+    <div class="dash-section-title">🏃 今日活动</div>
+    <div class="progress-card" id="ouraActivityCard">加载中…</div>
     <div class="dash-section-title">🧠 AI 健康解读</div>
     <div class="progress-card" id="ouraAnalysisCard">加载中…</div>
     <div class="dash-section-title">📊 近7天时间分布</div>
@@ -293,8 +297,9 @@ const OURA_ANALYSIS_CSV_URL = '/api/oura/analysis';
 // 兜底快照：网页环境的 fetch() 被 robots.txt 挡住时使用。
 // 每次你说"同步一下Oura"，我会用 Google Drive 直接读取最新数据，更新这里。
 const OURA_SNAPSHOT = {
-  'Date': '2026-08-21', 'Sleep Score': '85', 'Readiness Score': '79', 'Activity Score': '82',
-  'Steps': '6681', 'Avg HRV': '17', 'Resilience Level': 'solid'
+  'Date': '2026-08-21', 'Sleep Score': '85', 'Sleep Efficiency': '70', 'Readiness Score': '79', 'Activity Score': '66',
+  'Steps': '6681', 'Active Calories': '199', 'Avg HRV': '17', 'Avg Resting HR': '78',
+  'Stress High (min)': '165', 'Recovery High (min)': '30', 'Avg SpO2 %': '94.432', 'Resilience Level': 'solid'
 };
 const OURA_ANALYSIS_SNAPSHOT = [
   { 'Date': '2026-08-22', 'Period': 'day',
@@ -312,34 +317,172 @@ function parseCSV(text){
   });
 }
 
-async function fetchLatestValidRow(url, requiredField){
-  if(!url || url.startsWith('PASTE_')) return null;
+const STEP_GOAL = 8000;
+const ACTIVE_CAL_GOAL = 350;
+const RESILIENCE_SCORE = { limited:20, adequate:40, solid:60, strong:80, exceptional:100 };
+const RESILIENCE_LABEL = { limited:'有限', adequate:'一般', solid:'稳健', strong:'强韧', exceptional:'卓越' };
+
+function num(v){
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+let ouraRows = [];
+async function loadOuraRows(){
   try{
-    const res = await fetch(url);
-    if(!res.ok) return null;
-    const rows = parseCSV(await res.text());
-    for(let i = rows.length - 1; i >= 0; i--){
-      if(rows[i][requiredField]) return rows[i];
-    }
-    return null;
+    const res = await fetch(OURA_CSV_URL);
+    if(!res.ok) throw new Error('bad response');
+    const rows = parseCSV(await res.text()).filter(r => r['Date']);
+    ouraRows = rows.length ? rows : [OURA_SNAPSHOT];
   }catch(e){
-    console.error('fetch failed', url, e);
-    return null;
+    console.error('oura raw fetch failed', e);
+    ouraRows = [OURA_SNAPSHOT];
   }
 }
 
-function renderOuraCard(data){
-  const el = document.getElementById('ouraCard');
-  const usingSnapshot = !data;
-  if(!data) data = OURA_SNAPSHOT;
-  if(!data || !data['Date']){ el.innerHTML = '<div class="empty">加载失败，或还未配置 Oura 数据源</div>'; return; }
-  const fields = [
-    ['Sleep Score','睡眠分'], ['Readiness Score','恢复分'], ['Activity Score','活动分'],
-    ['Steps','步数'], ['Avg HRV','平均HRV'], ['Resilience Level','韧性等级']
+function latestRowWithFields(fields){
+  for(let i = ouraRows.length - 1; i >= 0; i--){
+    const r = ouraRows[i];
+    if(fields.every(f => r[f] !== undefined && r[f] !== '' && !(f === 'Avg SpO2 %' && num(r[f]) === 0))) return r;
+  }
+  return null;
+}
+
+function radarChartSVG(dims, size){
+  const n = dims.length;
+  const cx = size/2, cy = size/2, r = size/2 - 34;
+  const angle = i => -Math.PI/2 + i * (2*Math.PI/n);
+  const ringPolys = [0.25, 0.5, 0.75, 1].map(f => {
+    const pts = dims.map((d,i) => { const a = angle(i); return `${cx + Math.cos(a)*r*f},${cy + Math.sin(a)*r*f}`; }).join(' ');
+    return `<polygon points="${pts}" fill="none" stroke="#e5e2da" stroke-width="1"/>`;
+  }).join('');
+  const axisLines = dims.map((d,i) => {
+    const a = angle(i);
+    return `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a)*r}" y2="${cy + Math.sin(a)*r}" stroke="#e5e2da" stroke-width="1"/>`;
+  }).join('');
+  const dataPts = dims.map((d,i) => {
+    const a = angle(i);
+    const v = Math.max(0, Math.min(100, d.value)) / 100 * r;
+    return `${cx + Math.cos(a)*v},${cy + Math.sin(a)*v}`;
+  }).join(' ');
+  const labels = dims.map((d,i) => {
+    const a = angle(i);
+    const lx = cx + Math.cos(a)*(r+22), ly = cy + Math.sin(a)*(r+22);
+    return `<text x="${lx}" y="${ly}" font-size="11.5" fill="#8a8578" text-anchor="middle" dominant-baseline="middle">${escapeHtml(d.label)}</text>`;
+  }).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    ${ringPolys}${axisLines}
+    <polygon points="${dataPts}" fill="#3d6b5c" fill-opacity="0.28" stroke="#3d6b5c" stroke-width="2"/>
+    ${labels}
+  </svg>`;
+}
+
+function renderOuraOverview(){
+  const el = document.getElementById('ouraOverviewCard');
+  const row = latestRowWithFields(['Sleep Score','Readiness Score','Activity Score']);
+  if(!row){ el.innerHTML = '<div class="empty">加载失败，或还未配置 Oura 数据源</div>'; return; }
+  const spo2 = num(row['Avg SpO2 %']);
+  const resilience = (row['Resilience Level'] || '').trim().toLowerCase();
+  const dims = [
+    { label:'睡眠', value: num(row['Sleep Score']) ?? 0 },
+    { label:'恢复', value: num(row['Readiness Score']) ?? 0 },
+    { label:'活动', value: num(row['Activity Score']) ?? 0 },
+    { label:'压力韧性', value: RESILIENCE_SCORE[resilience] ?? 50 },
+    { label:'血氧', value: spo2 ? Math.max(0, Math.min(100, (spo2 - 90) / 10 * 100)) : 50 }
   ];
-  el.innerHTML = `<div style="font-weight:700; font-size:14.5px; margin-bottom:8px;">${escapeHtml(data['Date'] || '')}${usingSnapshot ? ' <span class="sub" style="font-weight:400; font-size:11.5px;">（上次手动同步的快照）</span>' : ''}</div>` +
-    fields.map(([key,label]) => data[key] !== undefined
-      ? `<div class="streak-row"><span>${label}</span><span>${escapeHtml(data[key])}</span></div>` : '').join('');
+  const tag = resilience ? `<span class="stage-badge stage-offer" style="margin-left:8px;">韧性：${RESILIENCE_LABEL[resilience] || row['Resilience Level']}</span>` : '';
+  el.innerHTML = `
+    <div style="font-weight:700; font-size:14.5px; margin-bottom:4px;">${escapeHtml(row['Date'])}${tag}</div>
+    <div style="display:flex; justify-content:center;">${radarChartSVG(dims, 220)}</div>
+  `;
+}
+
+function smoothPath(points){
+  if(points.length < 2) return `M ${points[0][0]},${points[0][1]}`;
+  let d = `M ${points[0][0]},${points[0][1]}`;
+  for(let i=0;i<points.length-1;i++){
+    const p0 = points[i===0?0:i-1], p1 = points[i], p2 = points[i+1];
+    const p3 = points[Math.min(i+2,points.length-1)];
+    const cp1x = p1[0] + (p2[0]-p0[0])/6, cp1y = p1[1] + (p2[1]-p0[1])/6;
+    const cp2x = p2[0] - (p3[0]-p1[0])/6, cp2y = p2[1] - (p3[1]-p1[1])/6;
+    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
+function dualLineChartSVG(labels, seriesA, seriesB){
+  const w = 300, h = 120, padX = 8, padY = 14;
+  const scale = arr => {
+    const min = Math.min(...arr), max = Math.max(...arr), range = (max - min) || 1;
+    return arr.map(v => h - padY - ((v - min) / range) * (h - padY*2));
+  };
+  const ys1 = scale(seriesA), ys2 = scale(seriesB);
+  const stepX = labels.length > 1 ? (w - padX*2) / (labels.length - 1) : 0;
+  const pts1 = ys1.map((y,i) => [padX + i*stepX, y]);
+  const pts2 = ys2.map((y,i) => [padX + i*stepX, y]);
+  const labelEls = labels.map((l,i) => (i===0 || i===labels.length-1 || i===Math.floor(labels.length/2))
+    ? `<text x="${padX+i*stepX}" y="${h-1}" font-size="9.5" fill="#8a8578" text-anchor="middle">${escapeHtml(l)}</text>` : '').join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:auto; display:block;">
+    <path d="${smoothPath(pts1)}" fill="none" stroke="#3d6b5c" stroke-width="2"/>
+    <path d="${smoothPath(pts2)}" fill="none" stroke="#c1573f" stroke-width="2"/>
+    ${labelEls}
+  </svg>`;
+}
+
+let trendRange = 7;
+function renderOuraTrend(range){
+  if(range) trendRange = range;
+  const el = document.getElementById('ouraTrendCard');
+  const rows = ouraRows.slice(-trendRange).filter(r => num(r['Avg HRV']) !== null && num(r['Avg Resting HR']) !== null);
+  const tabsHtml = `<div class="log-btns" style="margin-bottom:10px;">
+    <button class="chip btn-sm${trendRange===7?' hours':''}" onclick="renderOuraTrend(7)">7天</button>
+    <button class="chip btn-sm${trendRange===14?' hours':''}" onclick="renderOuraTrend(14)">14天</button>
+  </div>`;
+  if(rows.length < 2){ el.innerHTML = tabsHtml + '<div class="empty">数据不足，暂无法绘制趋势</div>'; return; }
+  const hrv = rows.map(r => num(r['Avg HRV']));
+  const rhr = rows.map(r => num(r['Avg Resting HR']));
+  const dates = rows.map(r => r['Date'].slice(5));
+  el.innerHTML = tabsHtml + dualLineChartSVG(dates, hrv, rhr) +
+    `<div style="display:flex; gap:16px; margin-top:8px; font-size:12px; color:var(--sub);">
+      <span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3d6b5c; margin-right:4px;"></span>平均HRV ${hrv[hrv.length-1]}ms</span>
+      <span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#c1573f; margin-right:4px;"></span>静息心率 ${rhr[rhr.length-1]}bpm</span>
+    </div>`;
+}
+
+function ringSVG(pct, size, color, label){
+  const r = size/2 - 8, circumference = 2*Math.PI*r;
+  const dash = circumference * Math.max(0, Math.min(1, pct/100));
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="#efefec" stroke-width="10"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="10"
+      stroke-dasharray="${dash} ${circumference}" stroke-linecap="round" transform="rotate(-90 ${size/2} ${size/2})"/>
+    <text x="${size/2}" y="${size/2 - 4}" font-size="15" font-weight="700" fill="#2b2b2b" text-anchor="middle">${Math.round(pct)}%</text>
+    <text x="${size/2}" y="${size/2 + 14}" font-size="10" fill="#8a8578" text-anchor="middle">${escapeHtml(label)}</text>
+  </svg>`;
+}
+
+function renderOuraActivity(){
+  const el = document.getElementById('ouraActivityCard');
+  const row = latestRowWithFields(['Steps']);
+  if(!row){ el.innerHTML = '<div class="empty">加载失败，或还未配置 Oura 数据源</div>'; return; }
+  const steps = num(row['Steps']) || 0;
+  const activeCal = num(row['Active Calories']) || 0;
+  const stepPct = Math.min(100, steps / STEP_GOAL * 100);
+  const calPct = Math.min(100, activeCal / ACTIVE_CAL_GOAL * 100);
+  el.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap; gap:12px;">
+      <div style="text-align:center;">
+        ${ringSVG(stepPct, 110, 'var(--active)', '目标' + STEP_GOAL)}
+        <div style="font-size:13px; font-weight:600; margin-top:2px;">${steps} 步</div>
+      </div>
+      <div style="flex:1; min-width:140px;">
+        <div class="bar-label"><span>活动消耗</span><span>${activeCal} kcal</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${calPct}%; background:var(--accent);"></div></div>
+        <div class="card-meta" style="margin-top:4px;">目标 ${ACTIVE_CAL_GOAL} kcal</div>
+      </div>
+    </div>
+    <p class="card-meta" style="margin-top:10px;">${escapeHtml(row['Date'])}</p>
+  `;
 }
 
 let ouraAnalysisRows = [];
@@ -352,6 +495,19 @@ async function loadOuraAnalysis(){
   }catch(e){ console.error('oura analysis fetch failed', e); ouraAnalysisRows = OURA_ANALYSIS_SNAPSHOT; }
   renderOuraAnalysisCard('day');
 }
+function parseAiSummary(text){
+  if(!text) return null;
+  const ratingMatch = text.match(/核心状态评级[：:]\s*([^\n]+)/);
+  const warnMatch = text.match(/异常维度预警[^：:]*[：:]?\s*([\s\S]*?)(?=(今日|下阶段|高优先级行动)|$)/);
+  const actionMatch = text.match(/(今日\/?下阶段高优先级行动|高优先级行动|行动建议)[^：:]*[：:]?\s*([\s\S]*)$/);
+  if(!ratingMatch && !warnMatch && !actionMatch) return null;
+  return {
+    rating: ratingMatch ? ratingMatch[1].trim() : '',
+    warnings: warnMatch ? warnMatch[1].trim() : '',
+    actions: actionMatch ? actionMatch[2].trim() : ''
+  };
+}
+
 function renderOuraAnalysisCard(period){
   period = period || 'day';
   const el = document.getElementById('ouraAnalysisCard');
@@ -363,8 +519,17 @@ function renderOuraAnalysisCard(period){
   const matches = ouraAnalysisRows.filter(r => r['Period'] === period);
   const latest = matches[matches.length - 1];
   if(!latest){ el.innerHTML = tabsHtml + '<div class="empty">暂无数据，或还未配置数据源</div>'; return; }
+  const parsed = parseAiSummary(latest['Summary']);
+  const bodyHtml = parsed ? `
+      ${parsed.rating ? `<span class="stage-badge stage-interview" style="margin-bottom:8px;">${escapeHtml(parsed.rating)}</span>` : ''}
+      ${parsed.warnings ? `<div style="margin:8px 0;"><div style="font-weight:600; font-size:12.5px; margin-bottom:4px;">⚠️ 异常预警</div><p class="card-notes" style="font-size:13px;">${escapeHtml(parsed.warnings)}</p></div>` : ''}
+      ${parsed.actions ? `<div style="margin:8px 0;"><div style="font-weight:600; font-size:12.5px; margin-bottom:4px;">✅ 行动建议</div><p class="card-notes" style="font-size:13px;">${escapeHtml(parsed.actions)}</p></div>` : ''}
+    ` : `<p class="card-notes" style="font-size:13.5px;">${escapeHtml(latest['Summary'] || '')}</p>`;
   el.innerHTML = tabsHtml +
-    `<p class="card-notes" style="font-size:13.5px;">${escapeHtml(latest['Summary'] || '')}</p>
+    `<details open>
+      <summary style="cursor:pointer; font-weight:600; font-size:13px; margin-bottom:6px;">诊断详情</summary>
+      ${bodyHtml}
+    </details>
      <p class="card-meta">${escapeHtml(latest['Date'] || '')}</p>`;
 }
 let state = { tasks: [], lastCheckin: null };
@@ -739,7 +904,11 @@ function daysBetween(dateStr){
 }
 
 function renderDashboard(){
-  fetchLatestValidRow(OURA_CSV_URL, 'Sleep Score').then(renderOuraCard);
+  loadOuraRows().then(() => {
+    renderOuraOverview();
+    renderOuraTrend();
+    renderOuraActivity();
+  });
   loadOuraAnalysis();
 
   // Farewell video progress
