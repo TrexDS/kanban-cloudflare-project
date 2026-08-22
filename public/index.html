@@ -166,6 +166,7 @@
       <button class="btn-ghost" onclick="toggleAddForm()">+ 新增线程</button>
     </div>
     <div class="add-form" id="addForm">
+      <div id="addFormTitle" style="font-weight:700; font-size:13.5px; margin-bottom:8px;">新增线程</div>
       <input type="text" id="newTitle" placeholder="线程名称，例如：面签复审">
       <textarea id="newNotes" placeholder="备注（可选）"></textarea>
       <div style="display:flex; gap:8px;">
@@ -482,6 +483,7 @@ function cardHtml(t){
   if(t.column !== 'active') actions.push(`<button class="chip" onclick="moveTask('${t.id}','active')">继续推进</button>`);
   if(t.column !== 'watch') actions.push(`<button class="chip" onclick="moveTask('${t.id}','watch')">搁置</button>`);
   if(t.column !== 'archived') actions.push(`<button class="chip danger" onclick="moveTask('${t.id}','archived')">归档</button>`);
+  actions.push(`<button class="chip" onclick="editTask('${t.id}')">编辑</button>`);
   actions.push(`<button class="chip" onclick="deleteTask('${t.id}')">删除</button>`);
   return `<div class="card ${t.column}">
       <p class="card-title">${escapeHtml(t.title)}</p>
@@ -503,14 +505,42 @@ async function deleteTask(id){
   state.tasks = state.tasks.filter(x => x.id !== id);
   await saveState(); render(); renderDaily(); showToast('已删除');
 }
-function toggleAddForm(){ document.getElementById('addForm').classList.toggle('show'); }
+let editingTaskId = null;
+function toggleAddForm(){
+  const el = document.getElementById('addForm');
+  if(el.classList.contains('show')){
+    el.classList.remove('show'); editingTaskId = null;
+  } else {
+    editingTaskId = null;
+    document.getElementById('newTitle').value = ''; document.getElementById('newNotes').value = '';
+    document.getElementById('addFormTitle').textContent = '新增线程';
+    el.classList.add('show');
+  }
+}
+function editTask(id){
+  const t = state.tasks.find(x => x.id === id);
+  if(!t) return;
+  editingTaskId = id;
+  document.getElementById('newTitle').value = t.title;
+  document.getElementById('newNotes').value = t.notes || '';
+  document.getElementById('addFormTitle').textContent = '编辑线程';
+  document.getElementById('addForm').classList.add('show');
+  document.getElementById('addForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 async function addTask(){
   const title = document.getElementById('newTitle').value.trim();
   const notes = document.getElementById('newNotes').value.trim();
   if(!title){ showToast('请输入线程名称'); return; }
-  state.tasks.push({ id: uid(), title, notes, column: 'active', updatedAt: Date.now() });
+  if(editingTaskId){
+    const t = state.tasks.find(x => x.id === editingTaskId);
+    if(t){ t.title = title; t.notes = notes; t.updatedAt = Date.now(); }
+    editingTaskId = null;
+  } else {
+    state.tasks.push({ id: uid(), title, notes, column: 'active', updatedAt: Date.now() });
+  }
   document.getElementById('newTitle').value = ''; document.getElementById('newNotes').value = '';
-  toggleAddForm(); await saveState(); render(); renderDaily(); showToast('已新增');
+  document.getElementById('addForm').classList.remove('show');
+  await saveState(); render(); renderDaily(); showToast('已保存');
 }
 
 function startCheckin(){
@@ -643,18 +673,19 @@ function renderDaily(){
   const date = todayStr(0);
   const entry = getEntry(date);
   document.getElementById('dailyDateLabel').textContent = `📅 ${date}`;
-  const activeTasks = state.tasks.filter(t => t.column === 'active');
+  const tasksToShow = state.tasks.filter(t => t.column === 'active' || (entry.hours[t.id] || 0) > 0);
   const listEl = document.getElementById('list-dailylog');
-  listEl.innerHTML = activeTasks.length ? activeTasks.map(t => {
+  listEl.innerHTML = tasksToShow.length ? tasksToShow.map(t => {
     const h = entry.hours[t.id] || 0;
+    const canLog = t.column === 'active';
     return `<div class="log-row">
-      <div class="log-row-title"><span>${escapeHtml(t.title)}</span><span class="log-today-total">${h > 0 ? h + 'h' : ''}</span></div>
-      <div class="log-btns">
+      <div class="log-row-title"><span>${escapeHtml(t.title)}${!canLog ? ' <span class="sub" style="font-weight:400; font-size:11.5px;">（已' + (t.column === 'archived' ? '归档' : '搁置') + '）</span>' : ''}</span><span class="log-today-total">${h > 0 ? h + 'h' : ''}</span></div>
+      ${canLog ? `<div class="log-btns">
         <button class="chip btn-sm" onclick="addHours('${t.id}',0.5)">+0.5h</button>
         <button class="chip btn-sm" onclick="addHours('${t.id}',1)">+1h</button>
         <button class="chip btn-sm" onclick="addHours('${t.id}',2)">+2h</button>
         ${h > 0 ? `<button class="chip btn-sm" onclick="resetHours('${t.id}')">清零</button>` : ''}
-      </div>
+      </div>` : ''}
     </div>`;
   }).join('') : '<div class="empty">「推进中」栏目前没有线程</div>';
   document.getElementById('dailyNoteInput').value = entry.note || '';
@@ -726,15 +757,14 @@ function renderDashboard(){
     fvCard.innerHTML = '';
   }
 
-  // Weekly bar chart
+  // Weekly bar chart (includes archived tasks so past logged hours don't disappear once archived)
   const days = last7Days();
-  const activeTasks = state.tasks.filter(t => t.column !== 'archived');
-  const totals = activeTasks.map(t => ({ t, h: sumHoursForTask(t.id, days) })).filter(x => x.h > 0);
+  const totals = state.tasks.map(t => ({ t, h: sumHoursForTask(t.id, days) })).filter(x => x.h > 0);
   const maxH = Math.max(1, ...totals.map(x => x.h));
   const barsEl = document.getElementById('weeklyBars');
   barsEl.innerHTML = totals.length ? totals.sort((a,b)=>b.h-a.h).map(x => `
     <div class="bar-row">
-      <div class="bar-label"><span>${escapeHtml(x.t.title)}</span><span>${x.h}h</span></div>
+      <div class="bar-label"><span>${escapeHtml(x.t.title)}${x.t.column === 'archived' ? ' <span class="sub" style="font-weight:400;">（已归档）</span>' : ''}</span><span>${x.h}h</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${(x.h/maxH*100)}%;"></div></div>
     </div>`).join('') : '<div class="empty">这周还没有打卡记录</div>';
 
