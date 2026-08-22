@@ -593,7 +593,7 @@ function renderOuraOverview(){
     { label:t('dimSpo2'), value: spo2Score ?? 50, display: spo2Score !== null ? `${Math.round(spo2Score)}` : '–' }
   ];
   const tag = resilience ? `<span class="stage-badge stage-offer" style="margin-left:8px;">${t('statePrefix')}${resilienceLabel(resilience) || row['Resilience Level']}</span>` : '';
-  const detailRows = [
+  const detailChips = [
     [t('dimSleep'), `${sleepScore}${t('scoreSuffix')}`],
     [t('dimReadiness'), `${readinessScore}${t('scoreSuffix')}`],
     [t('dimActivity'), `${activityScore}${t('scoreSuffix')}`],
@@ -603,9 +603,9 @@ function renderOuraOverview(){
   el.innerHTML = `
     <div style="font-weight:700; font-size:14.5px; margin-bottom:4px;">${escapeHtml(row['Date'])}${tag}</div>
     <div style="display:flex; justify-content:center;">${radarChartSVG(dims, 260)}</div>
-    <div style="font-size:11px; color:var(--sub); text-align:center; margin:2px 0 8px;">${t('radarRefNote')}</div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:12.5px;">
-      ${detailRows.map(([k,v]) => `<div><span style="color:var(--sub);">${k}：</span>${escapeHtml(v)}</div>`).join('')}
+    <div style="font-size:11px; color:var(--sub); text-align:center; margin:2px 0 10px;">${t('radarRefNote')}</div>
+    <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:6px;">
+      ${detailChips.map(([k,v]) => `<span class="chip" style="font-size:11.5px;">${escapeHtml(k)} ${escapeHtml(v)}</span>`).join('')}
     </div>
   `;
 }
@@ -644,10 +644,14 @@ function batteryBarsSVG(labels, scores){
   const stepX = (w - padX*2) / labels.length;
   const barW = Math.min(18, stepX * 0.62);
   const fontSize = labels.length > 10 ? 7 : 8.5;
+  const trackTop = toY(100), trackBottom = toY(0);
+  const minBarH = 3; // floor so a near-zero score still shows a visible sliver instead of looking like missing data
   const bars = scores.map((v,i) => {
     const cx = padX + stepX*i + stepX/2;
-    const y = toY(v);
-    return `<rect x="${(cx-barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${(h-padY-y).toFixed(1)}" rx="2" fill="${batteryColor(v)}"/>`;
+    const barH = Math.max(minBarH, h - padY - toY(v));
+    const y = (h - padY) - barH;
+    return `<rect x="${(cx-barW/2).toFixed(1)}" y="${trackTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${(trackBottom-trackTop).toFixed(1)}" rx="2" fill="#8a8578" opacity="0.07"/>
+      <rect x="${(cx-barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="2" fill="${batteryColor(v)}"/>`;
   }).join('');
   const labelEls = labels.map((l,i) => {
     const cx = padX + stepX*i + stepX/2;
