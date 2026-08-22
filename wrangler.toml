@@ -1,0 +1,6 @@
+name = "my-kanban"
+pages_build_output_dir = "public"
+
+[[kv_namespaces]]
+binding = "KANBAN_KV"
+id = "PLACEHOLDER_WILL_BE_FILLED_IN_STEP_4"
