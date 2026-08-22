@@ -615,7 +615,7 @@ function renderOuraOverview(){
     <div style="display:flex; justify-content:center;">${radarChartSVG(dims, 260)}</div>
     <div style="font-size:11px; color:var(--sub); text-align:center; margin:2px 0 10px;">${t('radarRefNote')}</div>
     <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:6px;">
-      ${detailChips.map(([k,v]) => `<span class="chip" style="font-size:11.5px;">${escapeHtml(k)} ${v !== null ? escapeHtml(`${v}${t('scoreSuffix')} · ${scoreBand(v)}`) : t('noDataShort')}</span>`).join('')}
+      ${detailChips.map(([k,v]) => `<span class="chip" style="font-size:11.5px;">${escapeHtml(k)} · ${v !== null ? escapeHtml(scoreBand(v)) : t('noDataShort')}</span>`).join('')}
     </div>
   `;
 }
