@@ -338,7 +338,11 @@ const I18N = {
     noDataShort: '暂无数据', scoreSuffix: '分',
     trend7d: '7天', trend14d: '14天', trendInsufficientData: '数据不足，暂无法绘制趋势',
     legendHrv: '平均HRV', legendRhr: '静息心率', trendBaselineNote: '虚线 = 个人历史均值基准',
-    statusRecovered: '状态恢复充沛', statusBalanced: '状态平衡', statusOverloaded: '近期负荷偏高，建议减量',
+    batteryHigh: '电量充沛', batteryMid: '电量持平', batteryLow: '电量偏低',
+    batteryHighDesc: '恢复充分，今天可以安排更高强度的投入。',
+    batteryMidDesc: '身体状态平稳，维持日常节奏即可。',
+    batteryLowDesc: '交感神经仍有负荷，建议放慢节奏、避免高强度消耗。',
+    avgLabel: '均值', todayStatusPrefix: '今日状态：',
     viewRawData: '查看原始 HRV / 心率曲线',
     stepsSuffix: '步', goalPrefix: '目标', activeCalLabel: '活动消耗', goalKcalPrefix: '目标',
     aiDetailsSummary: '诊断详情', aiWarnings: '⚠️ 异常预警', aiActions: '✅ 行动建议',
@@ -388,7 +392,11 @@ const I18N = {
     noDataShort: 'No data', scoreSuffix: ' pts',
     trend7d: '7d', trend14d: '14d', trendInsufficientData: 'Not enough data to chart a trend yet',
     legendHrv: 'Avg HRV', legendRhr: 'Resting HR', trendBaselineNote: 'Dashed line = personal historical average',
-    statusRecovered: 'Well Recovered', statusBalanced: 'Balanced', statusOverloaded: 'Load elevated — consider easing up',
+    batteryHigh: 'Well Charged', batteryMid: 'Steady', batteryLow: 'Low Battery',
+    batteryHighDesc: 'Well recovered — a good day to push harder.',
+    batteryMidDesc: 'Steady state — stick to your normal pace.',
+    batteryLowDesc: 'Nervous system still under load — ease up and avoid high-intensity efforts.',
+    avgLabel: 'avg', todayStatusPrefix: 'Today: ',
     viewRawData: 'View raw HRV / resting HR data',
     stepsSuffix: ' steps', goalPrefix: 'Goal ', activeCalLabel: 'Active Calories', goalKcalPrefix: 'Goal',
     aiDetailsSummary: 'Diagnosis Details', aiWarnings: '⚠️ Anomaly Warnings', aiActions: '✅ Recommended Actions',
@@ -501,9 +509,13 @@ function num(v){
 }
 
 let ouraRows = [];
+function fetchWithTimeout(url, ms){
+  return fetch(url, { signal: AbortSignal.timeout(ms) });
+}
+
 async function loadOuraRows(){
   try{
-    const res = await fetch(OURA_CSV_URL);
+    const res = await fetchWithTimeout(OURA_CSV_URL, 6000);
     if(!res.ok) throw new Error('bad response');
     const rows = parseCSV(await res.text()).filter(r => r['Date']);
     ouraRows = rows.length ? rows : [OURA_SNAPSHOT];
@@ -621,29 +633,34 @@ function stddev(arr){
 // Single composite "net recovery" score (0-100, 50=baseline) instead of two diverging raw lines:
 // HRV z-score (higher=better) minus RHR z-score (lower=better), averaged and rescaled.
 // Avoids forcing the reader to mentally flip the polarity of two opposite-direction metrics.
-function netRecoveryChartSVG(labels, scores){
-  const w = 300, h = 100, padX = 10, padY = 6, labelY = h + 12;
+// Discrete per-day energy bars instead of a line: each day is one bar, colored
+// green/gray/red against a labeled 0/50/100 scale. Bars read as "state per day"
+// at a glance, without asking the reader to track a wavy line's slope.
+function batteryColor(v){ return v >= 60 ? '#3d6b5c' : v < 40 ? '#c1573f' : '#8a8578'; }
+function batteryBarsSVG(labels, scores){
+  const w = 300, h = 100, padX = 20, padY = 6, labelY = h + 12;
   const toY = v => h - padY - (v/100)*(h-padY*2);
-  const midY = toY(50);
-  const stepX = labels.length > 1 ? (w - padX*2) / (labels.length - 1) : 0;
-  const pts = scores.map((v,i) => [padX + i*stepX, toY(v)]);
-  const gradId = 'netgrad' + Math.random().toString(36).slice(2,8);
-  const midPct = Math.max(0, Math.min(100, (midY/h*100))).toFixed(0);
-  const dots = pts.map((p,i) => `<circle cx="${p[0]}" cy="${p[1]}" r="${i===pts.length-1?3.5:2}" fill="${scores[i]>=50?'#3d6b5c':'#c1573f'}"/>`).join('');
+  const baseline = toY(50);
+  const stepX = (w - padX*2) / labels.length;
+  const barW = Math.min(18, stepX * 0.62);
   const fontSize = labels.length > 10 ? 7 : 8.5;
-  const labelEls = labels.map((l,i) =>
-    `<text x="${padX+i*stepX}" y="${labelY}" font-size="${fontSize}" fill="#8a8578" text-anchor="middle">${escapeHtml(l)}</text>`).join('');
+  const bars = scores.map((v,i) => {
+    const cx = padX + stepX*i + stepX/2;
+    const y = toY(v);
+    return `<rect x="${(cx-barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${(h-padY-y).toFixed(1)}" rx="2" fill="${batteryColor(v)}"/>`;
+  }).join('');
+  const labelEls = labels.map((l,i) => {
+    const cx = padX + stepX*i + stepX/2;
+    return `<text x="${cx}" y="${labelY}" font-size="${fontSize}" fill="#8a8578" text-anchor="middle">${escapeHtml(l)}</text>`;
+  }).join('');
   return `<svg viewBox="0 0 ${w} ${labelY+4}" style="width:100%; height:auto; display:block;">
-    <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="${h}" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3d6b5c"/>
-      <stop offset="${midPct}%" stop-color="#a3742f"/>
-      <stop offset="100%" stop-color="#c1573f"/>
-    </linearGradient></defs>
-    <rect x="0" y="0" width="${w}" height="${midY}" fill="#3d6b5c" opacity="0.07"/>
-    <rect x="0" y="${midY}" width="${w}" height="${h-midY}" fill="#c1573f" opacity="0.07"/>
-    <line x1="${padX}" y1="${midY}" x2="${w-padX}" y2="${midY}" stroke="#8a8578" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>
-    <path d="${smoothPath(pts)}" fill="none" stroke="url(#${gradId})" stroke-width="2.5"/>
-    ${dots}
+    <line x1="${padX}" y1="${toY(100)}" x2="${w-padX}" y2="${toY(100)}" stroke="#e5e2da" stroke-width="1"/>
+    <line x1="${padX}" y1="${baseline}" x2="${w-padX}" y2="${baseline}" stroke="#8a8578" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
+    <line x1="${padX}" y1="${toY(0)}" x2="${w-padX}" y2="${toY(0)}" stroke="#e5e2da" stroke-width="1"/>
+    <text x="2" y="${toY(100)+3}" font-size="7.5" fill="#8a8578">100</text>
+    <text x="2" y="${baseline+3}" font-size="7.5" fill="#8a8578">${t('avgLabel')}</text>
+    <text x="6" y="${toY(0)+3}" font-size="7.5" fill="#8a8578">0</text>
+    ${bars}
     ${labelEls}
   </svg>`;
 }
@@ -698,11 +715,16 @@ function renderOuraTrend(range){
     return Math.max(0, Math.min(100, 50 + ((hrvZ + rhrZ) / 2) * 25));
   });
   const latest = scores[scores.length - 1];
-  const statusKey = latest >= 65 ? 'statusRecovered' : latest < 35 ? 'statusOverloaded' : 'statusBalanced';
-  const statusColor = latest >= 65 ? '#3d6b5c' : latest < 35 ? '#c1573f' : '#a3742f';
+  const statusKey = latest >= 60 ? 'batteryHigh' : latest < 40 ? 'batteryLow' : 'batteryMid';
+  const descKey = latest >= 60 ? 'batteryHighDesc' : latest < 40 ? 'batteryLowDesc' : 'batteryMidDesc';
+  const statusColor = batteryColor(latest);
+  const emoji = latest >= 60 ? '🟢' : latest < 40 ? '🔴' : '🟡';
   el.innerHTML = tabsHtml +
-    `<div style="font-weight:700; font-size:14.5px; color:${statusColor}; margin-bottom:8px;">${t(statusKey)}（${Math.round(latest)}）</div>` +
-    netRecoveryChartSVG(dates, scores) +
+    `<div style="margin-bottom:10px;">
+      <div style="font-weight:700; font-size:16px; color:${statusColor};">${emoji} ${t('todayStatusPrefix')}${t(statusKey)}（${Math.round(latest)}/100）</div>
+      <div style="font-size:12.5px; color:var(--sub); margin-top:4px;">${t(descKey)}</div>
+    </div>` +
+    batteryBarsSVG(dates, scores) +
     `<details style="margin-top:10px;">
       <summary style="cursor:pointer; font-size:12px; color:var(--sub);">${t('viewRawData')}</summary>
       ${dualLineChartSVG(dates, hrv, rhr, meanHrv, meanRhr)}
@@ -754,7 +776,7 @@ let ouraAnalysisRows = [];
 async function loadOuraAnalysis(){
   if(!OURA_ANALYSIS_CSV_URL || OURA_ANALYSIS_CSV_URL.startsWith('PASTE_')){ ouraAnalysisRows = OURA_ANALYSIS_SNAPSHOT; renderOuraAnalysisCard('day'); return; }
   try{
-    const res = await fetch(OURA_ANALYSIS_CSV_URL);
+    const res = await fetchWithTimeout(OURA_ANALYSIS_CSV_URL, 6000);
     if(!res.ok) throw new Error('bad response');
     ouraAnalysisRows = parseCSV(await res.text());
   }catch(e){ console.error('oura analysis fetch failed', e); ouraAnalysisRows = OURA_ANALYSIS_SNAPSHOT; }
