@@ -477,15 +477,43 @@ const OURA_ANALYSIS_SNAPSHOT = [
     'Summary': '你的睡眠评分不错，但睡眠效率偏低（70%），卧床时间较长且不安睡期较多，提示夜间觉醒或浅睡偏多；同时静息心率偏高（78）、HRV偏低（17），压力时段较长（165分钟），身体整体处于"高压力、恢复不足"的状态。建议今晚睡前做10分钟腹式呼吸或正念冥想，并提前30分钟远离屏幕，以降低压力水平、提升睡眠连续性和次日恢复力。' }
 ];
 
+// Real CSV parser (handles quoted fields containing commas and embedded newlines,
+// and "" as an escaped quote) — a naive split('\n')/split(',') breaks as soon as a
+// cell (e.g. a multi-line AI summary) is quoted and spans multiple lines.
 function parseCSV(text){
-  const lines = text.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim());
-  return lines.slice(1).map(line => {
-    const cells = line.split(',');
-    const row = {};
-    headers.forEach((h, i) => row[h] = (cells[i] || '').trim());
-    return row;
-  });
+  const rows = [];
+  let field = '', row = [], inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else if(c === '"'){
+      inQuotes = true;
+    } else if(c === ','){
+      row.push(field); field = '';
+    } else if(c === '\n'){
+      row.push(field); rows.push(row); row = []; field = '';
+    } else if(c === '\r'){
+      // skip
+    } else {
+      field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1)
+    .filter(r => r.some(cell => cell !== ''))
+    .map(cols => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = (cols[i] !== undefined ? cols[i] : '').trim());
+      return obj;
+    });
 }
 
 const STEP_GOAL = 8000;
@@ -806,7 +834,7 @@ async function loadOuraAnalysis(){
 function parseAiSummary(text){
   if(!text) return null;
   const clean = text.replace(/\*\*/g, '');
-  const headingRe = /(核心状态(?:评级)?|异常(?:维度)?预警|(?:今日\/?下阶段)?高优先级行动|行动建议|行动)\s*[：:]/g;
+  const headingRe = /(核心状态(?:评级)?|异常(?:维度)?预警|(?:今日\/?下阶段)?高优(?:先级)?行动|行动建议|行动)\s*[：:]/g;
   const matches = [];
   let m;
   while((m = headingRe.exec(clean)) !== null){
