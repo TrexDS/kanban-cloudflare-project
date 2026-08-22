@@ -154,6 +154,7 @@
     <div class="tab on" id="tab-kanban" onclick="switchTab('kanban')">宏观看板</div>
     <div class="tab" id="tab-pipeline" onclick="switchTab('pipeline')">求职明细</div>
     <div class="tab" id="tab-daily" onclick="switchTab('daily')">今日打卡</div>
+    <div class="tab" id="tab-health" onclick="switchTab('health')">健康总览</div>
     <div class="tab" id="tab-dash" onclick="switchTab('dash')">Dashboard</div>
   </div>
 </header>
@@ -243,14 +244,18 @@
     <textarea class="daily-note" id="dailyNoteInput" placeholder="今天大概做了什么（可选）" onblur="saveDailyNote()"></textarea>
   </div>
 
+  <!-- HEALTH OVERVIEW VIEW -->
+  <div class="view" id="view-health">
+    <div class="dash-section-title">💍 健康总览（Oura）</div>
+    <div class="progress-card" id="ouraOverviewCard">加载中…</div>
+  </div>
+
   <!-- DASHBOARD VIEW -->
   <div class="view" id="view-dash">
     <div class="progress-card" id="farewellProgressCard"></div>
-    <div class="dash-section-title">💍 健康总览（Oura）</div>
-    <div class="progress-card" id="ouraOverviewCard">加载中…</div>
     <div class="dash-section-title">📈 关键趋势（HRV / 静息心率）</div>
     <div class="progress-card" id="ouraTrendCard">加载中…</div>
-    <div class="dash-section-title">🏃 今日活动</div>
+    <div class="dash-section-title">🏃 昨日活动</div>
     <div class="progress-card" id="ouraActivityCard">加载中…</div>
     <div class="dash-section-title">🧠 AI 健康解读</div>
     <div class="progress-card" id="ouraAnalysisCard">加载中…</div>
@@ -622,12 +627,13 @@ function fmtDate(ts){
 }
 
 function switchTab(name){
-  ['kanban','pipeline','daily','dash'].forEach(n => {
+  ['kanban','pipeline','daily','health','dash'].forEach(n => {
     document.getElementById('tab-'+n).classList.toggle('on', n===name);
     document.getElementById('view-'+n).classList.toggle('on', n===name);
   });
   if(name==='dash') renderDashboard();
   if(name==='daily') renderDaily();
+  if(name==='health') renderHealthOverview();
 }
 
 function render(){
@@ -903,9 +909,13 @@ function daysBetween(dateStr){
   return Math.round((target - now) / 86400000);
 }
 
+async function renderHealthOverview(){
+  await loadOuraRows();
+  renderOuraOverview();
+}
+
 function renderDashboard(){
   loadOuraRows().then(() => {
-    renderOuraOverview();
     renderOuraTrend();
     renderOuraActivity();
   });
