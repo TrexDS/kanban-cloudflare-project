@@ -325,7 +325,7 @@ function parseCSV(text){
 
 const STEP_GOAL = 8000;
 const ACTIVE_CAL_GOAL = 350;
-const RESILIENCE_LABEL = { limited:'有限', adequate:'一般', solid:'稳健', strong:'强韧', exceptional:'卓越' };
+const RESILIENCE_LABEL = { limited:'濒危', adequate:'凑合', solid:'耐刷', strong:'强化', exceptional:'满状态' };
 
 // SpO2 是 90%~100% 的窄区间指标，不能直接当 0-100 分画雷达图（会把血氧轴撑爆）。
 // 按临床参考区间分段映射：98%+ 视为满分，94% 左右是及格线，90% 以下视为 0 分。
@@ -411,19 +411,19 @@ function renderOuraOverview(){
   const activityScore = num(row['Activity Score']) ?? 0;
   const spo2Score = spo2 !== null ? spo2ToScore(spo2) : null;
   const dims = [
-    { label:'睡眠', value: sleepScore, display: `${sleepScore}` },
-    { label:'恢复', value: readinessScore, display: `${readinessScore}` },
-    { label:'活动', value: activityScore, display: `${activityScore}` },
-    { label:'压力韧性', value: stressContributor ?? 50, display: stressContributor !== null ? `${Math.round(stressContributor)}` : '–' },
-    { label:'血氧', value: spo2Score ?? 50, display: spo2Score !== null ? `${Math.round(spo2Score)}` : '–' }
+    { label:'离线充能', value: sleepScore, display: `${sleepScore}` },
+    { label:'基础回血', value: readinessScore, display: `${readinessScore}` },
+    { label:'物理输出', value: activityScore, display: `${activityScore}` },
+    { label:'抗造血条', value: stressContributor ?? 50, display: stressContributor !== null ? `${Math.round(stressContributor)}` : '–' },
+    { label:'进气效率', value: spo2Score ?? 50, display: spo2Score !== null ? `${Math.round(spo2Score)}` : '–' }
   ];
-  const tag = resilience ? `<span class="stage-badge stage-offer" style="margin-left:8px;">韧性：${RESILIENCE_LABEL[resilience] || row['Resilience Level']}</span>` : '';
+  const tag = resilience ? `<span class="stage-badge stage-offer" style="margin-left:8px;">状态：${RESILIENCE_LABEL[resilience] || row['Resilience Level']}</span>` : '';
   const detailRows = [
-    ['睡眠', `${sleepScore}分`],
-    ['恢复', `${readinessScore}分`],
-    ['活动', `${activityScore}分`],
-    ['压力韧性', stressContributor !== null ? `${Math.round(stressContributor)}分` : '暂无数据'],
-    ['血氧', spo2Score !== null ? `${Math.round(spo2Score)}分` : '暂无数据']
+    ['离线充能', `${sleepScore}分`],
+    ['基础回血', `${readinessScore}分`],
+    ['物理输出', `${activityScore}分`],
+    ['抗造血条', stressContributor !== null ? `${Math.round(stressContributor)}分` : '暂无数据'],
+    ['进气效率', spo2Score !== null ? `${Math.round(spo2Score)}分` : '暂无数据']
   ];
   el.innerHTML = `
     <div style="font-weight:700; font-size:14.5px; margin-bottom:4px;">${escapeHtml(row['Date'])}${tag}</div>
