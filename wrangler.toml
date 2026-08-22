@@ -3,4 +3,4 @@ pages_build_output_dir = "public"
 
 [[kv_namespaces]]
 binding = "KANBAN_KV"
-id = "PLACEHOLDER_WILL_BE_FILLED_IN_STEP_4"
+id = "38fe44dba6834447baa6dbf88f6f34a9"
