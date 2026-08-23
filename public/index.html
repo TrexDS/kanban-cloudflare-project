@@ -863,7 +863,9 @@ function renderOuraAnalysisCard(period){
     Object.keys(periodKeys).map(p =>
       `<button class="chip btn-sm${p===period?' hours':''}" onclick="renderOuraAnalysisCard('${p}')">${t(periodKeys[p])}</button>`
     ).join('') + `</div>`;
-  const matches = ouraAnalysisRows.filter(r => r['Period'] === period);
+  const matches = ouraAnalysisRows.filter(r => r['Period'] === period)
+  .slice()
+  .sort((a, b) => new Date(a['Date']) - new Date(b['Date']));
   const latest = matches[matches.length - 1];
   if(!latest){ el.innerHTML = tabsHtml + `<div class="empty">${t('aiNoData')}</div>`; return; }
   const parsed = parseAiSummary(latest['Summary']);
