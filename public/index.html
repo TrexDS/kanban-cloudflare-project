@@ -240,11 +240,15 @@
 
   <!-- DAILY LOG VIEW -->
   <div class="view" id="view-daily">
-    <p class="sub" style="margin:14px 0 0;" id="dailyDateLabel"></p>
-    <p class="sub" id="dailyIntro" style="margin:2px 0 14px;">点一下记录今天在这条线程上花的时间，晚上顺手打个卡就行。</p>
+    <div style="display:flex; align-items:center; gap:10px; margin:14px 0 4px; flex-wrap:wrap;">
+      <input type="date" id="dailyDatePicker" onchange="changeDailyDate(this.value)" style="font-size:13.5px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-family:inherit;">
+      <button class="chip btn-sm" onclick="changeDailyDate(todayStr(0))">回到今天</button>
+    </div>
+    <p class="sub" style="margin:6px 0 0;" id="dailyDateLabel"></p>
+    <p class="sub" id="dailyIntro" style="margin:2px 0 14px;">点一下记录当天在这条线程上花的时间；选别的日期就是给那天补打卡。</p>
     <div id="list-dailylog"></div>
-    <div class="dash-section-title" id="dailyNoteTitle">📝 今日备注</div>
-    <textarea class="daily-note" id="dailyNoteInput" placeholder="今天大概做了什么（可选）" onblur="saveDailyNote()"></textarea>
+    <div class="dash-section-title" id="dailyNoteTitle">📝 备注</div>
+    <textarea class="daily-note" id="dailyNoteInput" placeholder="当天大概做了什么（可选）" onblur="saveDailyNote()"></textarea>
   </div>
 
   <!-- HEALTH OVERVIEW VIEW -->
@@ -297,6 +301,11 @@
 const STORAGE_KEY = 'thread-kanban-data';
 const PIPELINE_KEY = 'job-pipeline-data';
 const DAILY_KEY = 'daily-log-data';
+
+// 实时同步打卡记录到 Google Sheet（通过 Apps Script Web App）。
+// 把下面两个值换成你 Apps Script 部署后的实际 URL 和你自己定的密钥（跟 Code.gs 里 KANBAN_SYNC_SECRET 保持一致）。
+const KANBAN_SYNC_URL = 'https://script.google.com/macros/s/AKfycbxhNVDg-akGO9z7okP_qepZl7ACH4mhrtHJxyNAb3s971WiETsWQG_p3D11YI94YYNh/exec';
+const KANBAN_SYNC_SECRET = 'Doris_KANBAN_SYNC_SECRET_2026';
 
 /* ---- i18n ---- */
 let LANG = (function(){ try{ return localStorage.getItem('kanban-lang') || 'zh'; }catch(e){ return 'zh'; } })();
@@ -834,7 +843,7 @@ async function loadOuraAnalysis(){
 function parseAiSummary(text){
   if(!text) return null;
   const clean = text.replace(/\*\*/g, '');
-  const headingRe = /(核心状态(?:评级)?|异常(?:维度)?预警|(?:今日\/?下阶段)?高优(?:先级)?行动|行动建议|行动)\s*[：:]/g;
+  const headingRe = /(核心状态(?:评级)?|(?:异常(?:维度)?)?预警|(?:今日\/?下阶段)?高优(?:先级)?行动|行动建议|行动)\s*[：:]/g;
   const matches = [];
   let m;
   while((m = headingRe.exec(clean)) !== null){
@@ -848,7 +857,7 @@ function parseAiSummary(text){
     content = content.replace(/\s*-\s*$/, '').trim(); // strip a trailing bullet dash belonging to the next heading
     const h = matches[i].heading;
     if(h.indexOf('核心状态') === 0) sections.rating = content;
-    else if(h.indexOf('异常') === 0) sections.warnings = content;
+    else if(h.indexOf('预警') !== -1) sections.warnings = content;
     else sections.actions = content;
   }
   if(!sections.rating && !sections.warnings && !sections.actions) return null;
@@ -864,8 +873,8 @@ function renderOuraAnalysisCard(period){
       `<button class="chip btn-sm${p===period?' hours':''}" onclick="renderOuraAnalysisCard('${p}')">${t(periodKeys[p])}</button>`
     ).join('') + `</div>`;
   const matches = ouraAnalysisRows.filter(r => r['Period'] === period)
-  .slice()
-  .sort((a, b) => new Date(a['Date']) - new Date(b['Date']));
+    .slice()
+    .sort((a, b) => new Date(a['Date']) - new Date(b['Date']));
   const latest = matches[matches.length - 1];
   if(!latest){ el.innerHTML = tabsHtml + `<div class="empty">${t('aiNoData')}</div>`; return; }
   const parsed = parseAiSummary(latest['Summary']);
@@ -921,23 +930,52 @@ async function kvSet(key, value){
   return res.ok;
 }
 
+// 带重试的读取：网络抖动时不放弃，避免用空壳数据静默覆盖云端真实数据。
+// 三次都失败时抛出异常，由调用方决定如何处理（而不是默默当成"没有数据"）。
+async function kvGetWithRetry(key, attempts){
+  attempts = attempts || 3;
+  let lastErr;
+  for(let i=0; i<attempts; i++){
+    try{
+      return await kvGet(key);
+    }catch(e){
+      lastErr = e;
+      if(i < attempts-1) await sleep(600);
+    }
+  }
+  throw lastErr;
+}
+
+let dailyLoadFailed = false;
+let pipelineLoadFailed = false;
+
 async function loadState(){
   try{
-    const val = await kvGet(STORAGE_KEY);
+    const val = await kvGetWithRetry(STORAGE_KEY);
     if(val){ state = val; }
     else { state.tasks = seedTasks.map(t => ({ id: uid(), ...t, updatedAt: Date.now() })); await saveState(); }
   }catch(e){
-    state.tasks = seedTasks.map(t => ({ id: uid(), ...t, updatedAt: Date.now() }));
-    await saveState();
+    console.error('kanban load failed after retries', e);
+    showToast('加载看板数据失败，请检查网络后刷新重试');
+    render(); renderPipeline(); renderDaily(); renderDashboard();
+    return; // 不要用种子数据覆盖保存，直接停止，避免后续任何保存动作把云端数据冲掉
   }
   try{
-    const val2 = await kvGet(PIPELINE_KEY);
+    const val2 = await kvGetWithRetry(PIPELINE_KEY);
     if(val2){ pipeline = val2; }
-  }catch(e){}
+  }catch(e){
+    pipelineLoadFailed = true;
+    console.error('pipeline load failed after retries', e);
+    showToast('求职明细加载失败，请检查网络后刷新重试');
+  }
   try{
-    const val3 = await kvGet(DAILY_KEY);
+    const val3 = await kvGetWithRetry(DAILY_KEY);
     if(val3){ dailyLog = val3; }
-  }catch(e){}
+  }catch(e){
+    dailyLoadFailed = true;
+    console.error('daily log load failed after retries', e);
+    showToast('打卡记录加载失败，请检查网络后刷新重试');
+  }
   render();
   renderPipeline();
   renderDaily();
@@ -961,8 +999,42 @@ async function trySave(key, dataObj, label){
 }
 
 async function saveState(){ return trySave(STORAGE_KEY, state, 'kanban'); }
-async function savePipeline(){ return trySave(PIPELINE_KEY, pipeline, 'pipeline'); }
-async function saveDaily(){ return trySave(DAILY_KEY, dailyLog, 'daily'); }
+async function savePipeline(){
+  if(pipelineLoadFailed){ showToast('求职明细还没加载成功，暂不保存，请先刷新页面'); return false; }
+  return trySave(PIPELINE_KEY, pipeline, 'pipeline');
+}
+async function saveDaily(date){
+  if(dailyLoadFailed){ showToast('打卡记录还没加载成功，暂不保存，请先刷新页面'); return false; }
+  const ok = await trySave(DAILY_KEY, dailyLog, 'daily');
+  if(ok) syncDailyLogToSheet(date || todayStr(0)); // 不阻塞、不影响主流程；同步失败只在控制台报错，不打扰使用
+  return ok;
+}
+
+// 把"今天"这一条打卡记录同步到 Google Sheet，任务ID换成可读的任务标题。
+// 用 sendBeacon 发送：不会等响应、不占用页面生命周期，Apps Script Web App 跨域时也不会被 CORS 卡住。
+function syncDailyLogToSheet(date){
+  if(!KANBAN_SYNC_URL || KANBAN_SYNC_URL.indexOf('替换成') !== -1) return; // 还没配置就跳过，不报错刷屏
+  const entry = dailyLog.entries[date];
+  if(!entry) return;
+  const hoursByTitle = {};
+  Object.keys(entry.hours).forEach(taskId => {
+    const task = state.tasks.find(t => t.id === taskId);
+    const label = task ? task.title : taskId;
+    if(entry.hours[taskId] > 0) hoursByTitle[label] = entry.hours[taskId];
+  });
+  const payload = {
+    secret: KANBAN_SYNC_SECRET,
+    date: date,
+    hours: hoursByTitle,
+    note: entry.note || '',
+    syncedAt: new Date().toISOString()
+  };
+  try{
+    const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' }); // text/plain 避免触发 CORS 预检
+    if(navigator.sendBeacon){ navigator.sendBeacon(KANBAN_SYNC_URL, blob); }
+    else { fetch(KANBAN_SYNC_URL, { method: 'POST', mode: 'no-cors', body: blob }).catch(()=>{}); }
+  }catch(e){ console.error('daily log sheet sync failed', e); }
+}
 
 function fmtDate(ts){
   if(!ts) return '';
@@ -1168,28 +1240,40 @@ function renderPipeline(){
 }
 
 /* ---- Daily log ---- */
+let selectedDailyDate = null; // 惰性初始化成今天，避免在 todayStr 定义之前就调用它
 function getEntry(date){
   if(!dailyLog.entries[date]) dailyLog.entries[date] = { hours: {}, note: '' };
   return dailyLog.entries[date];
 }
+function changeDailyDate(date){
+  if(!date) return;
+  selectedDailyDate = date;
+  document.getElementById('dailyDatePicker').value = date;
+  renderDaily();
+}
 async function addHours(taskId, amount){
-  const date = todayStr(0);
+  const date = selectedDailyDate || todayStr(0);
   const entry = getEntry(date);
   entry.hours[taskId] = Math.max(0, (entry.hours[taskId] || 0) + amount);
-  await saveDaily();
+  await saveDaily(date);
   renderDaily();
 }
 async function saveDailyNote(){
-  const date = todayStr(0);
+  const date = selectedDailyDate || todayStr(0);
   const entry = getEntry(date);
   entry.note = document.getElementById('dailyNoteInput').value.trim();
-  await saveDaily();
+  await saveDaily(date);
 }
 const CLEAR_LABEL = { zh: '清零', en: 'Clear' };
 function renderDaily(){
-  const date = todayStr(0);
+  if(!selectedDailyDate) selectedDailyDate = todayStr(0);
+  const date = selectedDailyDate;
   const entry = getEntry(date);
-  document.getElementById('dailyDateLabel').textContent = `📅 ${date}`;
+  const picker = document.getElementById('dailyDatePicker');
+  picker.max = todayStr(0); // 不能补未来的卡
+  if(picker.value !== date) picker.value = date;
+  const isToday = date === todayStr(0);
+  document.getElementById('dailyDateLabel').textContent = isToday ? `📅 ${date}` : `📅 补打卡：${date}`;
   const tasksToShow = state.tasks.filter(task => task.column === 'active' || (entry.hours[task.id] || 0) > 0);
   const listEl = document.getElementById('list-dailylog');
   listEl.innerHTML = tasksToShow.length ? tasksToShow.map(task => {
@@ -1209,10 +1293,10 @@ function renderDaily(){
   document.getElementById('dailyNoteInput').value = entry.note || '';
 }
 async function resetHours(taskId){
-  const date = todayStr(0);
+  const date = selectedDailyDate || todayStr(0);
   const entry = getEntry(date);
   entry.hours[taskId] = 0;
-  await saveDaily();
+  await saveDaily(date);
   renderDaily();
 }
 
