@@ -752,7 +752,8 @@ let trendRange = 7;
 function renderOuraTrend(range){
   if(range) trendRange = range;
   const el = document.getElementById('ouraTrendCard');
-  const rows = ouraRows.slice(-trendRange).filter(r => num(r['Avg HRV']) !== null && num(r['Avg Resting HR']) !== null);
+  const validRows = ouraRows.filter(r => num(r['Avg HRV']) !== null && num(r['Avg Resting HR']) !== null);
+  const rows = validRows.slice(-trendRange);
   const tabsHtml = `<div class="log-btns" style="margin-bottom:10px;">
     <button class="chip btn-sm${trendRange===7?' hours':''}" onclick="renderOuraTrend(7)">${t('trend7d')}</button>
     <button class="chip btn-sm${trendRange===14?' hours':''}" onclick="renderOuraTrend(14)">${t('trend14d')}</button>
