@@ -974,6 +974,12 @@ async function loadState(){
   }catch(e){
     console.error('kanban load failed after retries', e);
     showToast('加载看板数据失败，请检查网络后刷新重试');
+    // 看板主数据都没读成功，求职明细/打卡记录这两个 key 根本不会走到下面的读取，
+    // 但对应的 xxxLoadFailed 之前一直保持默认的 false——导致后续如果用户照样点了
+    // "打卡"，saveDaily() 的守卫形同虚设，会直接拿本地还没同步的空壳数据覆盖云端。
+    // 这里必须显式把两个守卫都标记为失败，堵住这个数据覆盖的口子。
+    pipelineLoadFailed = true;
+    dailyLoadFailed = true;
     render(); renderPipeline(); renderDaily(); renderDashboard();
     return; // 不要用种子数据覆盖保存，直接停止，避免后续任何保存动作把云端数据冲掉
   }
