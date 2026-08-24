@@ -557,7 +557,12 @@ async function loadOuraRows(){
     const res = await fetchWithTimeout(OURA_CSV_URL, 6000);
     if(!res.ok) throw new Error('bad response');
     const rows = parseCSV(await res.text()).filter(r => r['Date']);
-    ouraRows = rows.length ? rows : [OURA_SNAPSHOT];
+    // The sheet occasionally has the same Date synced twice (e.g. a retried Apps Script run);
+    // keep only the last row per date so trend windows count each day once, not twice.
+    const byDate = new Map();
+    rows.forEach(r => byDate.set(r['Date'], r));
+    const deduped = [...byDate.values()];
+    ouraRows = deduped.length ? deduped : [OURA_SNAPSHOT];
   }catch(e){
     console.error('oura raw fetch failed', e);
     ouraRows = [OURA_SNAPSHOT];
