@@ -557,7 +557,12 @@ async function loadOuraRows(){
     const res = await fetchWithTimeout(OURA_CSV_URL, 6000);
     if(!res.ok) throw new Error('bad response');
     const rows = parseCSV(await res.text()).filter(r => r['Date']);
-    ouraRows = rows.length ? rows : [OURA_SNAPSHOT];
+    // The sheet occasionally has the same Date synced twice (e.g. a retried Apps Script run);
+    // keep only the last row per date so trend windows count each day once, not twice.
+    const byDate = new Map();
+    rows.forEach(r => byDate.set(r['Date'], r));
+    const deduped = [...byDate.values()];
+    ouraRows = deduped.length ? deduped : [OURA_SNAPSHOT];
   }catch(e){
     console.error('oura raw fetch failed', e);
     ouraRows = [OURA_SNAPSHOT];
@@ -630,7 +635,8 @@ function renderOuraOverview(){
   const el = document.getElementById('ouraOverviewCard');
   const row = latestRowWithFields(['Sleep Score','Readiness Score','Activity Score']);
   if(!row){ el.innerHTML = `<div class="empty">${t('ouraLoadFailed')}</div>`; return; }
-  const spo2 = num(row['Avg SpO2 %']);
+  const spo2Raw = num(row['Avg SpO2 %']);
+  const spo2 = spo2Raw ? spo2Raw : null; // Oura returns 0 (not blank) when SpO2 wasn't measured that night — treat as no-data, not a real 0% score
   const stressContributor = num(row['Stress Contributor']);
   const resilience = (row['Resilience Level'] || '').trim().toLowerCase();
   const sleepScore = num(row['Sleep Score']) ?? 0;
@@ -752,7 +758,8 @@ let trendRange = 7;
 function renderOuraTrend(range){
   if(range) trendRange = range;
   const el = document.getElementById('ouraTrendCard');
-  const rows = ouraRows.slice(-trendRange).filter(r => num(r['Avg HRV']) !== null && num(r['Avg Resting HR']) !== null);
+  const validRows = ouraRows.filter(r => num(r['Avg HRV']) !== null && num(r['Avg Resting HR']) !== null);
+  const rows = validRows.slice(-trendRange);
   const tabsHtml = `<div class="log-btns" style="margin-bottom:10px;">
     <button class="chip btn-sm${trendRange===7?' hours':''}" onclick="renderOuraTrend(7)">${t('trend7d')}</button>
     <button class="chip btn-sm${trendRange===14?' hours':''}" onclick="renderOuraTrend(14)">${t('trend14d')}</button>
@@ -967,6 +974,12 @@ async function loadState(){
   }catch(e){
     console.error('kanban load failed after retries', e);
     showToast('加载看板数据失败，请检查网络后刷新重试');
+    // 看板主数据都没读成功，求职明细/打卡记录这两个 key 根本不会走到下面的读取，
+    // 但对应的 xxxLoadFailed 之前一直保持默认的 false——导致后续如果用户照样点了
+    // "打卡"，saveDaily() 的守卫形同虚设，会直接拿本地还没同步的空壳数据覆盖云端。
+    // 这里必须显式把两个守卫都标记为失败，堵住这个数据覆盖的口子。
+    pipelineLoadFailed = true;
+    dailyLoadFailed = true;
     render(); renderPipeline(); renderDaily(); renderDashboard();
     return; // 不要用种子数据覆盖保存，直接停止，避免后续任何保存动作把云端数据冲掉
   }
