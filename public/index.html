@@ -304,8 +304,8 @@ const DAILY_KEY = 'daily-log-data';
 
 // 实时同步打卡记录到 Google Sheet（通过 Apps Script Web App）。
 // 把下面两个值换成你 Apps Script 部署后的实际 URL 和你自己定的密钥（跟 Code.gs 里 KANBAN_SYNC_SECRET 保持一致）。
-const KANBAN_SYNC_URL = 'https://script.google.com/macros/s/AKfycbxhNVDg-akGO9z7okP_qepZl7ACH4mhrtHJxyNAb3s971WiETsWQG_p3D11YI94YYNh/exec';
-const KANBAN_SYNC_SECRET = 'Doris_KANBAN_SYNC_SECRET_2026';
+const KANBAN_SYNC_URL = 'https://script.google.com/macros/s/替换成你的部署ID/exec';
+const KANBAN_SYNC_SECRET = '替换成你自己定的密钥';
 
 /* ---- i18n ---- */
 let LANG = (function(){ try{ return localStorage.getItem('kanban-lang') || 'zh'; }catch(e){ return 'zh'; } })();
@@ -949,11 +949,21 @@ async function kvGetWithRetry(key, attempts){
 let dailyLoadFailed = false;
 let pipelineLoadFailed = false;
 
+let awaitingSeedConfirm = false; // KV 读到空时，先展示种子任务但不保存，等用户明确点确认
+
 async function loadState(){
   try{
     const val = await kvGetWithRetry(STORAGE_KEY);
-    if(val){ state = val; }
-    else { state.tasks = seedTasks.map(t => ({ id: uid(), ...t, updatedAt: Date.now() })); await saveState(); }
+    if(val){
+      state = val;
+    } else {
+      // KV 里确实没有数据（可能是首次使用，也可能是异常情况）。
+      // 只在界面上先"展示"一份初始模板，绝不在这里自动 saveState()——
+      // 避免任何读到空值的情况（哪怕只是短暂的）悄悄把真实数据冲掉。
+      state.tasks = seedTasks.map(t => ({ id: uid(), ...t, updatedAt: Date.now() }));
+      awaitingSeedConfirm = true;
+      showSeedConfirmBanner();
+    }
   }catch(e){
     console.error('kanban load failed after retries', e);
     showToast('加载看板数据失败，请检查网络后刷新重试');
@@ -980,6 +990,22 @@ async function loadState(){
   renderPipeline();
   renderDaily();
   renderDashboard();
+}
+
+function showSeedConfirmBanner(){
+  const bar = document.createElement('div');
+  bar.id = 'seedConfirmBanner';
+  bar.style.cssText = 'position:sticky; top:0; z-index:50; background:#fff3cd; border-bottom:1px solid #ffe08a; padding:10px 14px; font-size:13.5px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
+  bar.innerHTML = `<span>⚠️ 云端看板数据是空的——如果这不是你第一次用，先别急着操作，可能是数据异常，建议先联系确认原因。下面显示的是一套示例任务，尚未保存。</span>
+    <button class="chip btn-sm" onclick="confirmUseSeedTasks()">确认用这套开始（会保存）</button>`;
+  document.body.prepend(bar);
+}
+async function confirmUseSeedTasks(){
+  awaitingSeedConfirm = false;
+  const bar = document.getElementById('seedConfirmBanner');
+  if(bar) bar.remove();
+  await saveState();
+  showToast('已保存');
 }
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
