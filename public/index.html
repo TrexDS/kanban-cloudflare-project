@@ -630,7 +630,8 @@ function renderOuraOverview(){
   const el = document.getElementById('ouraOverviewCard');
   const row = latestRowWithFields(['Sleep Score','Readiness Score','Activity Score']);
   if(!row){ el.innerHTML = `<div class="empty">${t('ouraLoadFailed')}</div>`; return; }
-  const spo2 = num(row['Avg SpO2 %']);
+  const spo2Raw = num(row['Avg SpO2 %']);
+  const spo2 = spo2Raw ? spo2Raw : null; // Oura returns 0 (not blank) when SpO2 wasn't measured that night — treat as no-data, not a real 0% score
   const stressContributor = num(row['Stress Contributor']);
   const resilience = (row['Resilience Level'] || '').trim().toLowerCase();
   const sleepScore = num(row['Sleep Score']) ?? 0;
