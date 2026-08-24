@@ -304,8 +304,8 @@ const DAILY_KEY = 'daily-log-data';
 
 // 实时同步打卡记录到 Google Sheet（通过 Apps Script Web App）。
 // 把下面两个值换成你 Apps Script 部署后的实际 URL 和你自己定的密钥（跟 Code.gs 里 KANBAN_SYNC_SECRET 保持一致）。
-const KANBAN_SYNC_URL = 'https://script.google.com/macros/s/替换成你的部署ID/exec';
-const KANBAN_SYNC_SECRET = '替换成你自己定的密钥';
+const KANBAN_SYNC_URL = 'https://script.google.com/macros/s/AKfycbxhNVDg-akGO9z7okP_qepZl7ACH4mhrtHJxyNAb3s971WiETsWQG_p3D11YI94YYNh/exec';
+const KANBAN_SYNC_SECRET = 'Doris_KANBAN_Sync2026';
 
 /* ---- i18n ---- */
 let LANG = (function(){ try{ return localStorage.getItem('kanban-lang') || 'zh'; }catch(e){ return 'zh'; } })();
