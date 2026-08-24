@@ -572,7 +572,7 @@ async function loadOuraRows(){
 function latestRowWithFields(fields){
   for(let i = ouraRows.length - 1; i >= 0; i--){
     const r = ouraRows[i];
-    if(fields.every(f => r[f] !== undefined && r[f] !== '' && !(f === 'Avg SpO2 %' && num(r[f]) === 0))) return r;
+    if(fields.every(f => r[f] !== undefined && r[f] !== '')) return r;
   }
   return null;
 }
@@ -759,7 +759,13 @@ function renderOuraTrend(range){
   if(range) trendRange = range;
   const el = document.getElementById('ouraTrendCard');
   const validRows = ouraRows.filter(r => num(r['Avg HRV']) !== null && num(r['Avg Resting HR']) !== null);
-  const rows = validRows.slice(-trendRange);
+  // Window by actual calendar days from the latest available date, not just "last N rows with
+  // data" — otherwise a long gap in HRV/RHR readings would let a "7天" tab silently pull in rows
+  // from weeks ago while still labeled as a 7-day window.
+  const latestDate = validRows.length ? validRows[validRows.length - 1]['Date'] : null;
+  const rows = latestDate
+    ? validRows.filter(r => (new Date(latestDate) - new Date(r['Date'])) / 86400000 < trendRange)
+    : [];
   const tabsHtml = `<div class="log-btns" style="margin-bottom:10px;">
     <button class="chip btn-sm${trendRange===7?' hours':''}" onclick="renderOuraTrend(7)">${t('trend7d')}</button>
     <button class="chip btn-sm${trendRange===14?' hours':''}" onclick="renderOuraTrend(14)">${t('trend14d')}</button>
