@@ -302,10 +302,9 @@ const STORAGE_KEY = 'thread-kanban-data';
 const PIPELINE_KEY = 'job-pipeline-data';
 const DAILY_KEY = 'daily-log-data';
 
-// 实时同步打卡记录到 Google Sheet（通过 Apps Script Web App）。
-// 把下面两个值换成你 Apps Script 部署后的实际 URL 和你自己定的密钥（跟 Code.gs 里 KANBAN_SYNC_SECRET 保持一致）。
-const KANBAN_SYNC_URL = 'https://script.google.com/macros/s/AKfycbxhNVDg-akGO9z7okP_qepZl7ACH4mhrtHJxyNAb3s971WiETsWQG_p3D11YI94YYNh/exec';
-const KANBAN_SYNC_SECRET = 'Doris_KANBAN_Sync2026';
+// 实时同步打卡记录到 Google Sheet：走同源的 /api/kanban/sync 代理，
+// 真正的 Apps Script URL 和密钥只存在 Cloudflare Pages 的环境变量里，不会出现在这份客户端 JS 里。
+const KANBAN_SYNC_PROXY_URL = '/api/kanban/sync';
 
 /* ---- i18n ---- */
 let LANG = (function(){ try{ return localStorage.getItem('kanban-lang') || 'zh'; }catch(e){ return 'zh'; } })();
@@ -1056,9 +1055,9 @@ async function saveDaily(date){
 }
 
 // 把"今天"这一条打卡记录同步到 Google Sheet，任务ID换成可读的任务标题。
-// 用 sendBeacon 发送：不会等响应、不占用页面生命周期，Apps Script Web App 跨域时也不会被 CORS 卡住。
+// 走同源的 /api/kanban/sync 代理（真正的 Apps Script URL/密钥只在 Cloudflare 那一侧），
+// 用 keepalive 发送：页面切走/关闭也不会中断这次请求，不阻塞主流程。
 function syncDailyLogToSheet(date){
-  if(!KANBAN_SYNC_URL || KANBAN_SYNC_URL.indexOf('替换成') !== -1) return; // 还没配置就跳过，不报错刷屏
   const entry = dailyLog.entries[date];
   if(!entry) return;
   const hoursByTitle = {};
@@ -1068,17 +1067,17 @@ function syncDailyLogToSheet(date){
     if(entry.hours[taskId] > 0) hoursByTitle[label] = entry.hours[taskId];
   });
   const payload = {
-    secret: KANBAN_SYNC_SECRET,
     date: date,
     hours: hoursByTitle,
     note: entry.note || '',
     syncedAt: new Date().toISOString()
   };
-  try{
-    const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' }); // text/plain 避免触发 CORS 预检
-    if(navigator.sendBeacon){ navigator.sendBeacon(KANBAN_SYNC_URL, blob); }
-    else { fetch(KANBAN_SYNC_URL, { method: 'POST', mode: 'no-cors', body: blob }).catch(()=>{}); }
-  }catch(e){ console.error('daily log sheet sync failed', e); }
+  fetch(KANBAN_SYNC_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    keepalive: true
+  }).catch(e => console.error('daily log sheet sync failed', e));
 }
 
 function fmtDate(ts){
