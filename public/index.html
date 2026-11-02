@@ -958,6 +958,7 @@ async function kvGetWithRetry(key, attempts){
   throw lastErr;
 }
 
+let stateLoadFailed = false;
 let dailyLoadFailed = false;
 let pipelineLoadFailed = false;
 
@@ -983,6 +984,7 @@ async function loadState(){
     // 但对应的 xxxLoadFailed 之前一直保持默认的 false——导致后续如果用户照样点了
     // "打卡"，saveDaily() 的守卫形同虚设，会直接拿本地还没同步的空壳数据覆盖云端。
     // 这里必须显式把两个守卫都标记为失败，堵住这个数据覆盖的口子。
+    stateLoadFailed = true;
     pipelineLoadFailed = true;
     dailyLoadFailed = true;
     render(); renderPipeline(); renderDaily(); renderDashboard();
@@ -1042,7 +1044,11 @@ async function trySave(key, dataObj, label){
   return false;
 }
 
-async function saveState(){ return trySave(STORAGE_KEY, state, 'kanban'); }
+async function saveState(){
+  // 主看板没加载成功时内存里是空的默认 state，保存会把云端整份看板覆盖成空壳
+  if(stateLoadFailed){ showToast('看板还没加载成功，暂不保存，请先刷新页面'); return false; }
+  return trySave(STORAGE_KEY, state, 'kanban');
+}
 async function savePipeline(){
   if(pipelineLoadFailed){ showToast('求职明细还没加载成功，暂不保存，请先刷新页面'); return false; }
   return trySave(PIPELINE_KEY, pipeline, 'pipeline');
