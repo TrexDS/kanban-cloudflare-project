@@ -6,10 +6,15 @@
 export async function onRequestPost(context) {
   const { KANBAN_SYNC_URL, KANBAN_SYNC_SECRET } = context.env;
   if (!KANBAN_SYNC_URL || !KANBAN_SYNC_SECRET) return new Response('not configured', { status: 501 });
+  const text = await context.request.text();
+  if (text.length > 64 * 1024) return new Response('too large', { status: 413 });
   let body;
   try {
-    body = await context.request.json();
+    body = JSON.parse(text);
   } catch (e) {
+    return new Response('bad request', { status: 400 });
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.date !== 'string') {
     return new Response('bad request', { status: 400 });
   }
   const payload = { ...body, secret: KANBAN_SYNC_SECRET };
