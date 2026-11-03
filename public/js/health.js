@@ -2,19 +2,6 @@
 const OURA_CSV_URL = '/api/oura/raw';
 const OURA_ANALYSIS_CSV_URL = '/api/oura/analysis';
 
-// 兜底快照：网页环境的 fetch() 被 robots.txt 挡住时使用。
-// 每次你说"同步一下Oura"，我会用 Google Drive 直接读取最新数据，更新这里。
-const OURA_SNAPSHOT = {
-  'Date': '2026-08-21', 'Sleep Score': '85', 'Sleep Efficiency': '70', 'Readiness Score': '79', 'Activity Score': '66',
-  'Steps': '6681', 'Active Calories': '199', 'Avg HRV': '17', 'Avg Resting HR': '78',
-  'Stress High (min)': '165', 'Recovery High (min)': '30', 'Stress Contributor': '57.2',
-  'Avg SpO2 %': '94.432', 'Resilience Level': 'solid'
-};
-const OURA_ANALYSIS_SNAPSHOT = [
-  { 'Date': '2026-08-22', 'Period': 'day',
-    'Summary': '你的睡眠评分不错，但睡眠效率偏低（70%），卧床时间较长且不安睡期较多，提示夜间觉醒或浅睡偏多；同时静息心率偏高（78）、HRV偏低（17），压力时段较长（165分钟），身体整体处于"高压力、恢复不足"的状态。建议今晚睡前做10分钟腹式呼吸或正念冥想，并提前30分钟远离屏幕，以降低压力水平、提升睡眠连续性和次日恢复力。' }
-];
-
 // Real CSV parser (handles quoted fields containing commas and embedded newlines,
 // and "" as an escaped quote) — a naive split('\n')/split(',') breaks as soon as a
 // cell (e.g. a multi-line AI summary) is quoted and spans multiple lines.
@@ -62,6 +49,7 @@ function num(v){
 }
 
 let ouraRows = [];
+let ouraStatus = 'idle'; // idle | ok | failed
 function fetchWithTimeout(url, ms){
   return fetch(url, { signal: AbortSignal.timeout(ms) });
 }
@@ -75,12 +63,13 @@ async function loadOuraRows(){
     // keep only the last row per date so trend windows count each day once, not twice.
     const byDate = new Map();
     rows.forEach(r => byDate.set(r['Date'], r));
-    const deduped = [...byDate.values()];
-    ouraRows = deduped.length ? deduped : [OURA_SNAPSHOT];
+    ouraRows = [...byDate.values()].sort((a, b) => a['Date'] < b['Date'] ? -1 : 1);
+    ouraStatus = ouraRows.length ? 'ok' : 'failed';
   }catch(e){
     console.error('oura raw fetch failed', e);
-    ouraRows = [OURA_SNAPSHOT];
+    ouraRows = []; ouraStatus = 'failed'; // no stale fallback: a failed read must say so
   }
+  updateHealthBadge();
 }
 
 function latestRowWithFields(fields){
@@ -109,7 +98,7 @@ function stddev(arr){
   const m = average(arr);
   return Math.sqrt(arr.reduce((s,v) => s+(v-m)*(v-m), 0) / arr.length);
 }
-const md = d => `${+d.slice(5,7)}/${+d.slice(8,10)}`;
+const mdStr = d => `${+d.slice(5,7)}/${+d.slice(8,10)}`;
 function fmtMin(m){
   m = Math.round(m || 0);
   const h = Math.floor(m / 60), r = m % 60;
@@ -121,7 +110,7 @@ const RINGS = [['Sleep Score', 'ringSleep', '--ring-sleep'], ['Readiness Score',
 function renderOuraOverview(){
   const el = document.getElementById('ouraOverviewCard');
   const row = latestRowWithFields(RINGS.map(r => r[0]));
-  if(!row){ el.innerHTML = `<div class="empty">${t('ouraLoadFailed')}</div>`; return; }
+  if(!row){ el.innerHTML = `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`; return; }
   const size = 150, c = size / 2, w = 13;
   const rings = RINGS.map(([field, key, color], i) => {
     const v = num(row[field]) ?? 0, r = c - w / 2 - 2 - i * (w + 3), len = 2 * Math.PI * r;
@@ -160,7 +149,7 @@ function stagesOf(r){
 function renderOuraSleep(){
   const el = document.getElementById('ouraSleepCard');
   const nights = ouraRows.filter(r => num(r['Total Sleep (min)']) && num(r['Deep Sleep (min)']) !== null);
-  if(!nights.length){ el.innerHTML = `<div class="empty">${t('ouraLoadFailed')}</div>`; return; }
+  if(!nights.length){ el.innerHTML = `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`; return; }
   const last = nights[nights.length - 1], { s, asleep, bed } = stagesOf(last);
   const prev = nights.slice(-15, -1).map(r => stagesOf(r).asleep);
   const diff = prev.length >= 3 ? Math.round(asleep - average(prev)) : null;
@@ -179,19 +168,20 @@ function renderOuraSleep(){
       <span>${t('stage_' + k)}<span class="sub">${t('stage_' + k + 'Desc')}</span></span><b>${fmtMin(s[k])}</b><span class="sub">${Math.round(s[k] / bed * 100)}%</span></div>`).join('');
 
   // last 7 nights, stacked vertical bars in hours (time in bed), same stage order bottom = deep
-  const week = nights.slice(-7).map(r => ({ r, ...stagesOf(r) }));
+  const week = nights.slice(-healthRange).map(r => ({ r, ...stagesOf(r) })), dense = week.length > 10;
+  const every = Math.ceil(week.length / 8); // date labels: at most ~8 under the bars
   const maxH = Math.max(9, Math.ceil(Math.max(...week.map(x => x.asleep)) / 60)); // bars = time asleep (awake only in the tooltip), so height matches the label
   const H = 140, toPx = m => m / 60 / maxH * H;
   const avgWeek = average(week.map(x => x.asleep));
   const bars = week.map(x => {
-    const tip = `${md(x.r['Date'])} · ${t('asleepLabel')} ${fmtMin(x.asleep)}` + STAGES.map(([k]) => `\n${t('stage_' + k)}  ${fmtMin(x.s[k])}`).join('');
+    const tip = `${mdStr(x.r['Date'])} · ${t('asleepLabel')} ${fmtMin(x.asleep)}` + STAGES.map(([k]) => `\n${t('stage_' + k)}  ${fmtMin(x.s[k])}`).join('');
     const stack = STAGES.filter(([k]) => k !== 'awake').map(([k]) => x.s[k] ? `<span style="height:${toPx(x.s[k]).toFixed(1)}px; background:var(--sleep-${k})"></span>` : '').join('');
-    return `<div class="sl-col" tabindex="0" data-tip="${escapeHtml(tip)}"><div class="sl-val">${fmtMin(x.asleep)}</div><div class="sl-stack">${stack}</div></div>`;
+    return `<div class="sl-col" tabindex="0" data-tip="${escapeHtml(tip)}">${dense ? '' : `<div class="sl-val">${fmtMin(x.asleep)}</div>`}<div class="sl-stack">${stack}</div></div>`;
   }).join('');
   const grid = [4, 8].map(h => `<div class="sl-grid" style="bottom:${(h / maxH * H).toFixed(1)}px"><span>${h}h</span></div>`).join('');
 
   el.innerHTML = `
-    <div class="health-verdict">${t('sleepHeadline').replace('{d}', md(last['Date'])).replace('{t}', fmtMin(asleep))}${diffTxt ? `<span class="sub"> · ${diffTxt}</span>` : ''}</div>
+    <div class="health-verdict">${t('sleepHeadline').replace('{d}', mdStr(last['Date'])).replace('{t}', fmtMin(asleep))}${diffTxt ? `<span class="sub"> · ${diffTxt}</span>` : ''}</div>
     <div class="ring-wrap">
       <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${STAGES.map(([k]) => `${t('stage_' + k)} ${fmtMin(s[k])}`).join(', ')}">
         ${segs}
@@ -202,9 +192,10 @@ function renderOuraSleep(){
         <div class="sub" style="margin-top:6px;">${t('efficiencyLabel')} ${num(last['Sleep Efficiency']) ?? '–'}% · ${t('latencyLabel')} ${fmtMin(num(last['Sleep Latency (min)']))}</div>
       </div>
     </div>
-    <div class="health-sub-title">${t('last7Nights')}<span class="sub"> · ${t('avgAsleep')} ${fmtMin(avgWeek)}</span></div>
-    <div class="sl-chart" style="height:${H + 18}px">${grid}<div class="sl-cols">${bars}</div></div>
-    <div class="sl-labels">${week.map(x => `<span>${md(x.r['Date'])}</span>`).join('')}</div>`;
+    <div class="health-sub-title">${t('lastNNights').replace('{n}', week.length)}<span class="sub"> · ${t('avgAsleep')} ${fmtMin(avgWeek)}</span></div>
+    ${trendLine(nights.map(r => stagesOf(r).asleep), fmtMin)}
+    <div class="sl-chart" style="height:${H + 18}px">${grid}<div class="sl-cols${dense ? ' dense' : ''}">${bars}</div></div>
+    <div class="sl-labels${dense ? ' dense' : ''}">${week.map((x, i) => `<span>${(week.length - 1 - i) % every ? '' : mdStr(x.r['Date'])}</span>`).join('')}</div>`;
 }
 
 /* ---- Vitals: last night vs. your own usual range (Apple Vitals style) ---- */
@@ -216,37 +207,57 @@ const VITALS = [
   { f: 'Avg Breath Rate', key: 'vBreath', unit: t => t('perMin'), good: 0, floor: 0.5, dp: 1 },
   { f: 'Temperature Deviation', key: 'vTemp', unit: '°C', good: 0, floor: 0.2, dp: 2, signed: true }
 ];
+// Usual range for night i = that metric's previous 30 nights, mean ± 1 SD (floored so a very steady metric doesn't flag noise).
+function usualRange(xs, i, floor){
+  const hist = xs.slice(Math.max(0, i - 30), i);
+  if(hist.length < 5) return null;
+  const m = average(hist), sd = Math.max(stddev(hist), floor);
+  return { m, lo: m - sd, hi: m + sd };
+}
+function vitalSeries(v){
+  return ouraRows.map(r => ({ d: r['Date'], x: num(r[v.f]) })).filter(p => p.x !== null && !(v.zeroIsMissing && p.x === 0));
+}
+// "+1 above / -1 below / 0 inside" the usual range for every night (null when there's no range yet)
+function vitalFlags(v){
+  const vals = vitalSeries(v), xs = vals.map(p => p.x);
+  return vals.map((p, i) => { const u = usualRange(xs, i, v.floor); return { d: p.d, x: p.x, u, dir: !u ? null : p.x > u.hi ? 1 : p.x < u.lo ? -1 : 0 }; });
+}
+function sparkSVG(vals, u, worse, fmt){
+  const W = 300, H = 46, xs = vals.map(p => p.x), all = [...xs, u.lo, u.hi];
+  const min = Math.min(...all), max = Math.max(...all), pad = (max - min) * 0.12 || 1;
+  const X = i => vals.length > 1 ? 4 + i / (vals.length - 1) * (W - 8) : W / 2, Y = x => H - 4 - (x - min + pad) / (max - min + 2 * pad) * (H - 8);
+  const pts = vals.map((p, i) => `${X(i).toFixed(1)},${Y(p.x).toFixed(1)}`).join(' ');
+  const last = vals[vals.length - 1];
+  return `<svg class="vital-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${vals.length}">
+    <rect x="0" y="${Y(u.hi).toFixed(1)}" width="${W}" height="${(Y(u.lo) - Y(u.hi)).toFixed(1)}" fill="var(--active-bg)"/>
+    <polyline points="${pts}" fill="none" stroke="#9c978b" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    ${vals.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.x).toFixed(1)}" r="9" fill="transparent" data-tip="${mdStr(p.d)} · ${fmt(p.x)}"/>`).join('')}
+    <line x1="${X(vals.length - 1).toFixed(1)}" y1="${Y(last.x).toFixed(1)}" x2="${X(vals.length - 1).toFixed(1)}" y2="${Y(last.x).toFixed(1)}" stroke="#fff" stroke-width="12" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <line x1="${X(vals.length - 1).toFixed(1)}" y1="${Y(last.x).toFixed(1)}" x2="${X(vals.length - 1).toFixed(1)}" y2="${Y(last.x).toFixed(1)}" stroke="${worse ? 'var(--watch)' : 'var(--active)'}" stroke-width="9" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  </svg>`;
+}
 function renderOuraVitals(){
   const el = document.getElementById('ouraVitalsCard');
   const rows = VITALS.map(v => {
-    const vals = ouraRows.map(r => ({ d: r['Date'], x: num(r[v.f]) })).filter(p => p.x !== null && !(v.zeroIsMissing && p.x === 0));
-    if(!vals.length) return '';
-    const cur = vals[vals.length - 1], hist = vals.slice(-31, -1).map(p => p.x);
+    const flags = vitalFlags(v);
+    if(!flags.length) return '';
+    const cur = flags[flags.length - 1], u = cur.u;
     const unit = typeof v.unit === 'function' ? v.unit(t) : v.unit;
     const fmt = x => (v.signed && x > 0 ? '+' : '') + x.toFixed(v.dp);
-    if(hist.length < 5) return `<div class="vital"><div class="vital-head"><span>${t(v.key)}</span><b>${fmt(cur.x)} <small>${unit}</small></b></div><div class="sub">${t('vitalNoBaseline')}</div></div>`;
-    // "usual range" = your own last 30 nights, mean ± 1 SD (with a floor so a very steady metric doesn't flag noise)
-    const m = average(hist), sd = Math.max(stddev(hist), v.floor), lo = m - sd, hi = m + sd;
-    const dir = cur.x > hi ? 1 : cur.x < lo ? -1 : 0;
-    const worse = dir !== 0 && (v.good === 0 || dir !== v.good);
+    const head = `<div class="vital-head"><span>${t(v.key)}</span><b>${fmt(cur.x)} <small>${unit}</small></b></div>`;
+    if(!u) return `<div class="vital">${head}<div class="sub">${t('vitalNoBaseline')}</div></div>`;
+    const dir = cur.dir, worse = dir !== 0 && (v.good === 0 || dir !== v.good);
     const status = dir === 0 ? `✓ ${t('vitalInRange')}` : `${dir > 0 ? '↑' : '↓'} ${t(dir > 0 ? 'vitalHigh' : 'vitalLow')}`;
-    const recent = vals.slice(-15, -1).map(p => p.x);
-    const all = [...recent, cur.x, lo, hi], min = Math.min(...all), max = Math.max(...all), pad = (max - min) * 0.12 || 1;
-    const pos = x => ((x - min + pad) / (max - min + 2 * pad) * 100).toFixed(1) + '%';
-    return `<div class="vital">
-      <div class="vital-head"><span>${t(v.key)}</span><b>${fmt(cur.x)} <small>${unit}</small></b></div>
-      <div class="vital-track" data-tip="${t('usualRange')} ${fmt(lo)}–${fmt(hi)} ${unit}">
-        <span class="vital-band" style="left:${pos(lo)}; width:calc(${pos(hi)} - ${pos(lo)})"></span>
-        ${recent.map(x => `<span class="vital-dot past" style="left:${pos(x)}"></span>`).join('')}
-        <span class="vital-dot now ${worse ? 'warn' : ''}" style="left:${pos(cur.x)}"></span>
-      </div>
-      <div class="vital-foot"><span class="${worse ? 'vital-warn' : 'vital-ok'}">${status}</span><span class="sub">${t('usualRange')} ${fmt(lo)}–${fmt(hi)}</span></div>
+    return `<div class="vital">${head}
+      ${sparkSVG(flags.slice(-healthRange), u, worse, x => fmt(x) + ' ' + unit)}
+      <div class="vital-foot"><span class="${worse ? 'vital-warn' : 'vital-ok'}">${status}</span><span class="sub">${t('usualRange')} ${fmt(u.lo)}–${fmt(u.hi)}</span></div>
+      ${trendLine(flags.map(f => f.x), x => x.toFixed(v.dp) + ' ' + unit)}
       <div class="sub" style="font-size:11.5px;">${t(v.key + 'Desc')}</div>
     </div>`;
   }).join('');
   el.innerHTML = rows ? `<div class="sub" style="margin-bottom:8px;">${t('vitalsIntro')}</div>${rows}
-    <div class="vital-legend sub"><span><i class="vital-band-key"></i>${t('usualRange')}</span><span><i class="vital-dot-key past"></i>${t('last14Nights')}</span><span><i class="vital-dot-key"></i>${t('lastNight')}</span></div>`
-    : `<div class="empty">${t('ouraLoadFailed')}</div>`;
+    <div class="vital-legend sub"><span><i class="vital-band-key"></i>${t('usualRange')}</span><span><i class="vital-dot-key"></i>${t('lastNight')}</span></div>`
+    : `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`;
 }
 
 /* ---- Activity: yesterday's step / calorie rings + 7-day steps ---- */
@@ -266,13 +277,13 @@ function ringSVG(pct, size, color, label){
 function renderOuraActivity(){
   const el = document.getElementById('ouraActivityCard');
   const days = ouraRows.filter(r => num(r['Steps']) !== null);
-  if(!days.length){ el.innerHTML = `<div class="empty">${t('ouraLoadFailed')}</div>`; return; }
+  if(!days.length){ el.innerHTML = `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`; return; }
   const row = days[days.length - 1];
   const steps = num(row['Steps']) || 0, activeCal = num(row['Active Calories']) || 0;
   const week = days.slice(-7), maxS = Math.max(STEP_GOAL, ...week.map(r => num(r['Steps']) || 0)), H = 90;
   const hit = week.filter(r => (num(r['Steps']) || 0) >= STEP_GOAL).length;
   el.innerHTML = `
-    <div class="sub" style="margin-bottom:6px;">${md(row['Date'])}</div>
+    <div class="sub" style="margin-bottom:6px;">${mdStr(row['Date'])}</div>
     <div style="display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap; gap:12px;">
       <div style="text-align:center;">${ringSVG(steps / STEP_GOAL * 100, 110, 'var(--ring-activity)', t('goalPrefix') + STEP_GOAL)}
         <div class="card-meta" style="margin-top:4px;">${steps.toLocaleString()}${t('stepsSuffix')}</div></div>
@@ -282,20 +293,126 @@ function renderOuraActivity(){
     <div class="health-sub-title">${t('steps7d')}<span class="sub"> · ${t('goalHitDays').replace('{n}', hit).replace('{m}', week.length)}</span></div>
     <div class="sl-chart" style="height:${H + 18}px">
       <div class="sl-grid goal" style="bottom:${(STEP_GOAL / maxS * H).toFixed(1)}px"><span>${STEP_GOAL}</span></div>
-      <div class="sl-cols">${week.map(r => { const v = num(r['Steps']) || 0; return `<div class="sl-col" tabindex="0" data-tip="${md(r['Date'])} · ${v.toLocaleString()}${t('stepsSuffix')}">
+      <div class="sl-cols">${week.map(r => { const v = num(r['Steps']) || 0; return `<div class="sl-col" tabindex="0" data-tip="${mdStr(r['Date'])} · ${v.toLocaleString()}${t('stepsSuffix')}">
         <div class="sl-stack"><span style="height:${Math.max(2, v / maxS * H).toFixed(1)}px; background:var(--ring-activity)"></span></div></div>`; }).join('')}</div>
     </div>
-    <div class="sl-labels">${week.map(r => `<span>${md(r['Date'])}</span>`).join('')}</div>`;
+    <div class="sl-labels">${week.map(r => `<span>${mdStr(r['Date'])}</span>`).join('')}</div>`;
+}
+
+/* ---- Page status: read failure / data freshness, range switch, tab badge ---- */
+let healthRange = (() => { try{ return +localStorage.getItem('health-range') || 7; }catch(e){ return 7; } })();
+const dayDiff = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+function ouraAge(){ return ouraRows.length ? dayDiff(ouraRows[ouraRows.length - 1]['Date'], todayStr(0)) : null; }
+function healthNeedsAttention(){ return ouraStatus === 'failed' || (ouraStatus === 'ok' && ouraAge() >= 2); }
+function updateHealthBadge(){
+  const el = document.getElementById('tab-health');
+  if(el) el.textContent = t('tabHealth') + (healthNeedsAttention() ? ' ⚠️' : '');
+}
+function renderHealthStatus(){
+  const el = document.getElementById('healthStatus'), age = ouraAge();
+  el.innerHTML = ouraStatus === 'failed'
+    ? `<div class="health-status bad">${t('ouraReadFailed')} <button class="chip btn-sm" onclick="renderHealthOverview()">${t('retry')}</button></div>`
+    : age >= 2 ? `<div class="health-status warn">${t('dataStale').replace('{n}', age).replace('{d}', mdStr(ouraRows[ouraRows.length - 1]['Date']))}</div>`
+    : ouraRows.length ? `<span class="sub">${t('dataAsOf').replace('{d}', mdStr(ouraRows[ouraRows.length - 1]['Date']))}</span>` : '';
+  document.getElementById('healthRange').innerHTML = [7, 30, 90].map(n =>
+    `<button class="chip btn-sm${n === healthRange ? ' on' : ''}" onclick="setHealthRange(${n})">${t('rangeN').replace('{n}', n)}</button>`).join('');
+  updateHealthBadge();
+}
+function setHealthRange(n){
+  healthRange = n; try{ localStorage.setItem('health-range', n); }catch(e){}
+  renderHealthStatus(); renderOuraSleep(); renderOuraVitals(); renderStressRecovery();
+}
+// "Last N vs the N before" — only when the earlier window is at least half full, otherwise say nothing.
+function trendLine(xs, fmt){
+  const n = healthRange, cur = xs.slice(-n), prev = xs.slice(-2 * n, -n);
+  if(cur.length < n / 2 || prev.length < n / 2) return '';
+  const a = average(cur), b = average(prev), d = a - b;
+  const txt = Math.abs(d) <= Math.abs(b) * 0.02 ? t('trendSame').replace('{n}', n)
+    : t('trendVs').replace('{n}', n).replace('{v}', `${d > 0 ? '↑' : '↓'} ${fmt(Math.abs(d))}`);
+  return `<div class="trend-line">${txt}</div>`;
+}
+
+/* ---- Alerts: patterns over several nights, by fixed rules (no AI) ---- */
+function streakOf(flags, want){ let n = 0; for(let i = flags.length - 1; i >= 0 && flags[i].dir === want; i--) n++; return n; }
+function healthAlerts(){
+  const out = [], F = {}; VITALS.forEach(v => F[v.key] = vitalFlags(v));
+  const latest = ouraRows.length ? ouraRows[ouraRows.length - 1]['Date'] : null;
+  const off = [['vHrv', -1], ['vRhr', 1], ['vTemp', 1], ['vBreath', 1]].filter(([k, d]) => { const f = F[k][F[k].length - 1]; return f && f.d === latest && f.dir === d; });
+  if(off.length >= 2) out.push(['bad', t('alertCombo').replace('{list}', off.map(([k]) => t(k)).join(t('listSep')))]);
+  [['vHrv', -1, 3, 'alertHrvLow'], ['vRhr', 1, 3, 'alertRhrHigh'], ['vTemp', 1, 2, 'alertTempHigh']].forEach(([k, d, min, key]) => {
+    const n = streakOf(F[k], d); if(n >= min) out.push(['warn', t(key).replace('{n}', n)]);
+  });
+  const nights = ouraRows.filter(r => num(r['Total Sleep (min)'])).slice(-5), short = nights.filter(r => num(r['Total Sleep (min)']) < 360).length;
+  if(nights.length >= 3 && short >= 3) out.push(['warn', t('alertShortSleep').replace('{n}', short).replace('{m}', nights.length)]);
+  const sr = stressRows(); let sn = 0;
+  for(let i = sr.length - 1; i >= 0 && sr[i].st >= 60 && sr[i].st >= 2 * sr[i].rc; i--) sn++;
+  if(sn >= 3) out.push(['warn', t('alertStress').replace('{n}', sn)]);
+  return out;
+}
+function renderHealthAlerts(){
+  const list = ouraStatus === 'ok' ? healthAlerts() : [];
+  document.getElementById('healthAlerts').innerHTML = list.length ? `<div class="health-alerts">
+    <div class="attn-head">${t('alertsTitle')} (${list.length})</div>
+    ${list.map(([lvl, txt]) => `<div class="health-alert ${lvl}">${lvl === 'bad' ? '🔴' : '🟠'} ${escapeHtml(txt)}</div>`).join('')}</div>` : '';
+}
+
+/* ---- Stress vs recovery (Oura daytime stress) ---- */
+function stressRows(){
+  return ouraRows.filter(r => (r['Stress High (min)'] || '') !== '').map(r => ({ d: r['Date'], st: num(r['Stress High (min)']) || 0, rc: num(r['Recovery High (min)']) || 0 }));
+}
+function renderStressRecovery(){
+  const el = document.getElementById('ouraStressCard'), rows = stressRows();
+  if(!rows.length){ el.innerHTML = `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`; return; }
+  const last = rows[rows.length - 1], tot = last.st + last.rc || 1;
+  const verdict = last.st >= 2 * last.rc && last.st >= 60 ? 'stressHeavy' : last.rc >= last.st ? 'stressBalanced' : 'stressMild';
+  const win = rows.slice(-healthRange), dense = win.length > 10, every = Math.ceil(win.length / 8);
+  const max = Math.max(60, ...win.map(x => Math.max(x.st, x.rc))), H = 54;
+  const sum = k => win.reduce((a, x) => a + x[k], 0);
+  el.innerHTML = `
+    <div class="health-verdict">${t(verdict)}</div>
+    <div class="sr-split"><span style="flex:${last.st || 0.001}; background:var(--stress)"></span><span style="flex:${last.rc || 0.001}; background:var(--recovery)"></span></div>
+    <div class="sr-legend"><span><i style="background:var(--stress)"></i>${t('stressLabel')} <b>${fmtMin(last.st)}</b></span><span><i style="background:var(--recovery)"></i>${t('recoveryLabel')} <b>${fmtMin(last.rc)}</b></span><span class="sub">${mdStr(last.d)}</span></div>
+    <div class="health-sub-title">${t('lastNDays').replace('{n}', win.length)}<span class="sub"> · ${t('stressTotals').replace('{s}', fmtMin(sum('st'))).replace('{r}', fmtMin(sum('rc')))}</span></div>
+    <div class="sr-chart${dense ? ' dense' : ''}">${win.map(x => `<div class="sr-col" tabindex="0" data-tip="${mdStr(x.d)}\n${t('stressLabel')} ${fmtMin(x.st)}\n${t('recoveryLabel')} ${fmtMin(x.rc)}">
+      <div class="sr-up"><span style="height:${(x.st / max * H).toFixed(1)}px"></span></div><div class="sr-down"><span style="height:${(x.rc / max * H).toFixed(1)}px"></span></div></div>`).join('')}</div>
+    <div class="sl-labels${dense ? ' dense' : ''}">${win.map((x, i) => `<span>${(win.length - 1 - i) % every ? '' : mdStr(x.d)}</span>`).join('')}</div>
+    <div class="sub" style="font-size:11.5px; margin-top:6px;">${t('stressDesc')}</div>`;
+}
+
+/* ---- Work hours (daily log) vs next-morning readiness ---- */
+// shortcut: plain bucket averages, no control for sleep/weekday etc.; upgrade to a regression once there are months of paired days.
+const WORK_BUCKETS = [[0, 3, 'workLess3'], [3, 6, 'work3to6'], [6, Infinity, 'work6plus']];
+function renderWorkRecovery(){
+  const el = document.getElementById('ouraWorkCard');
+  if(ouraStatus !== 'ok'){ el.innerHTML = `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`; return; }
+  const pairs = ouraRows.map(r => {
+    const ready = num(r['Readiness Score']); if(ready === null) return null;
+    const prev = new Date(r['Date'] + 'T00:00:00'); prev.setDate(prev.getDate() - 1);
+    const e = dailyLog.entries[fmtDate(prev.getTime())], h = e ? Object.values(e.hours || {}).reduce((a, b) => a + b, 0) : 0;
+    return h > 0 ? { h, ready } : null; // days with nothing logged are unknown, not "zero work"
+  }).filter(Boolean);
+  if(pairs.length < 6){ el.innerHTML = `<div class="sub">${t('workNotEnough').replace('{n}', pairs.length)}</div>`; return; }
+  const groups = WORK_BUCKETS.map(([lo, hi, key]) => { const g = pairs.filter(p => p.h >= lo && p.h < hi); return { key, n: g.length, avg: g.length ? average(g.map(p => p.ready)) : null }; });
+  const light = groups[0], heavy = groups[2];
+  const result = light.n >= 3 && heavy.n >= 3
+    ? t('workResult').replace('{h}', Math.round(heavy.avg)).replace('{d}', Math.abs(Math.round(light.avg - heavy.avg))).replace('{dir}', t(heavy.avg <= light.avg ? 'lower' : 'higher'))
+    : t('workNeedMore');
+  el.innerHTML = `<div class="health-verdict">${result}</div>
+    ${groups.map(g => `<div class="hbar" data-tip="${t(g.key)} · ${t('workDays').replace('{n}', g.n)} · ${t('ringReady')} ${g.avg === null ? '–' : Math.round(g.avg)}">
+      <span>${t(g.key)} <span class="sub">· ${t('workDays').replace('{n}', g.n)}</span></span><span class="hbar-val">${g.avg === null ? '–' : Math.round(g.avg)}</span>
+      <div class="hbar-track"><span style="width:${g.avg ?? 0}%; background:var(--ring-ready)"></span></div></div>`).join('')}
+    <div class="sub" style="font-size:11.5px; margin-top:6px;">${t('workDesc').replace('{n}', pairs.length)}</div>`;
 }
 
 let ouraAnalysisRows = [];
+let ouraAnalysisFailed = false;
 async function loadOuraAnalysis(){
-  if(!OURA_ANALYSIS_CSV_URL || OURA_ANALYSIS_CSV_URL.startsWith('PASTE_')){ ouraAnalysisRows = OURA_ANALYSIS_SNAPSHOT; renderOuraAnalysisCard('day'); return; }
   try{
     const res = await fetchWithTimeout(OURA_ANALYSIS_CSV_URL, 6000);
     if(!res.ok) throw new Error('bad response');
     ouraAnalysisRows = parseCSV(await res.text());
-  }catch(e){ console.error('oura analysis fetch failed', e); ouraAnalysisRows = OURA_ANALYSIS_SNAPSHOT; }
+    ouraAnalysisFailed = false;
+  }catch(e){ console.error('oura analysis fetch failed', e); ouraAnalysisRows = []; ouraAnalysisFailed = true; }
   renderOuraAnalysisCard('day');
 }
 // Robust to how the model actually phrases headings: with/without "评级"/"维度",
@@ -336,7 +453,7 @@ function renderOuraAnalysisCard(period){
     .slice()
     .sort((a, b) => new Date(a['Date']) - new Date(b['Date']));
   const latest = matches[matches.length - 1];
-  if(!latest){ el.innerHTML = tabsHtml + `<div class="empty">${t('aiNoData')}</div>`; return; }
+  if(!latest){ el.innerHTML = tabsHtml + `<div class="empty">${t(ouraAnalysisFailed ? 'aiReadFailed' : 'aiNoData')}</div>`; return; }
   const parsed = parseAiSummary(latest['Summary']);
   const bodyHtml = parsed ? `
       ${parsed.rating ? `<span class="stage-badge stage-interview" style="margin-bottom:8px;">${escapeHtml(parsed.rating)}</span>` : ''}

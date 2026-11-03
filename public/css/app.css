@@ -8,6 +8,7 @@
        score rings = categorical slots 1-3 (validated all-pairs). */
     --sleep-awake:#eb6834; --sleep-rem:#86b6ef; --sleep-light:#3987e5; --sleep-deep:#184f95;
     --ring-sleep:#2a78d6; --ring-ready:#eb6834; --ring-activity:#1baf7a;
+    --stress:#eb6834; --recovery:#1baf7a;
   }
   *{box-sizing:border-box;}
   body{
@@ -67,7 +68,7 @@
   .task-project{font-size:11.5px; color:var(--sub); margin:0 0 6px;}
   /* Dashboard figures. Task-status ramp: one green hue light→dark (todo→doing→done) + amber for waiting/blocked. */
   :root{ --seg-todo:#9fcbb6; --seg-doing:#4f9a7c; --seg-waiting:#c7811f; --seg-done:#1f5f47; }
-  .kpi-row{display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin:14px 0 6px;}
+  .kpi-row{display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:10px; margin:14px 0 6px;}
   .kpi{background:var(--card); border-radius:14px; padding:12px 14px; box-shadow:0 1px 2px rgba(0,0,0,0.05);}
   .kpi-label{font-size:12px; color:var(--sub);}
   .kpi-value{font-size:26px; font-weight:600; margin-top:2px;}
@@ -248,4 +249,24 @@
   .vital-band-key{width:16px; height:8px; background:var(--active-bg); border:1px solid #cfe3da; border-radius:4px;}
   .vital-dot-key{width:9px; height:9px; border-radius:50%; background:var(--active);}
   .vital-dot-key.past{width:6px; height:6px; background:#b9b4a8;}
+  .kpi-warn{font-size:15px; color:var(--watch); cursor:pointer;}
+  .health-top{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0 10px;}
+  .health-status{font-size:13.5px; padding:8px 12px; border-radius:10px; font-weight:600;}
+  .health-status.bad{background:#f7e3dd; color:var(--accent);}
+  .health-status.warn{background:var(--watch-bg); color:var(--watch);}
+  .health-alerts{background:#fff; border-radius:14px; padding:10px 14px; margin-bottom:14px; border-left:4px solid var(--watch);}
+  .health-alert{font-size:13.5px; padding:4px 0;}
+  .trend-line{font-size:12px; color:var(--sub); margin:2px 0 6px;}
+  .vital-spark{display:block; width:100%; height:46px; margin:6px 0 4px;}
+  .sl-cols.dense, .sl-labels.dense, .sr-chart.dense{gap:2px;}
+  .sl-labels.dense span{font-size:10px; white-space:nowrap; overflow:visible;}
+  .sr-split{display:flex; gap:2px; height:12px; border-radius:6px; overflow:hidden; margin:4px 0 6px;}
+  .sr-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:13px;}
+  .sr-legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px;}
+  .sr-chart{display:flex; gap:8px; border-top:1px solid transparent;}
+  .sr-col{flex:1; display:flex; flex-direction:column; outline:none;}
+  .sr-up, .sr-down{height:54px; display:flex; justify-content:center;}
+  .sr-up{align-items:flex-end; border-bottom:1px solid #cfcabd;} .sr-down{align-items:flex-start;}
+  .sr-up span, .sr-down span{width:min(100%, 22px); display:block;}
+  .sr-up span{background:var(--stress); border-radius:4px 4px 0 0;} .sr-down span{background:var(--recovery); border-radius:0 0 4px 4px;}
 

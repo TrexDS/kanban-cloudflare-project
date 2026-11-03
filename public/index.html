@@ -120,6 +120,8 @@
 
   <!-- HEALTH OVERVIEW VIEW -->
   <div class="view" id="view-health">
+    <div class="health-top"><div id="healthStatus"></div><div class="acc-toggle" id="healthRange" style="margin:0;"></div></div>
+    <div id="healthAlerts"></div>
     <div class="dash-grid">
       <div class="dash-main">
         <section class="panel">
@@ -135,6 +137,14 @@
         <section class="panel">
           <div class="dash-section-title" id="healthOverviewTitle">⭕ 今日状态</div>
           <div id="ouraOverviewCard">加载中…</div>
+        </section>
+        <section class="panel">
+          <div class="dash-section-title" id="healthStressTitle">😮‍💨 压力 vs 恢复</div>
+          <div id="ouraStressCard">加载中…</div>
+        </section>
+        <section class="panel">
+          <div class="dash-section-title" id="healthWorkTitle">💼 工作投入 vs 第二天恢复</div>
+          <div id="ouraWorkCard">加载中…</div>
         </section>
         <section class="panel">
           <div class="dash-section-title" id="healthActivityTitle">🏃 活动</div>

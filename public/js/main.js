@@ -10,3 +10,4 @@
 
 applyI18n();
 loadState();
+loadOuraRows().then(renderDashboard); // readiness KPI on the dashboard + ⚠️ on the health tab if Oura can't be read

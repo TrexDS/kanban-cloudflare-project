@@ -35,9 +35,27 @@ const I18N = {
     dailyNoteTitle: '📝 今日备注', placeholderDailyNote: '今天大概做了什么（可选）',
     dailyEmptyActive: '目前没有可打卡的项目（探索中 / 推进中 / 维护中）',
     tagArchived: '（已归档）', tagWatch: '（已搁置）',
-    healthOverviewTitle: '⭕ 今日状态', healthSleepTitle: '🌙 睡眠', healthVitalsTitle: '❤️ 身体指标',
+    healthOverviewTitle: '⭕ 今日状态', healthSleepTitle: '🌙 睡眠', healthVitalsTitle: '❤️ 身体指标', 
     healthActivityTitle: '🏃 活动', healthAiTitle: '🧠 AI 健康解读',
-    ouraLoadFailed: '加载失败，或还未配置 Oura 数据源',
+    ouraReadFailed: '❗ Oura 数据读取失败，现在没有可显示的健康数据。可能是同步服务出了问题，稍后点「重试」。', ouraCardFailed: '❗ 读取失败', aiReadFailed: '❗ AI 解读读取失败', ouraReadFailedShort: '读取失败',
+    ouraNoData: '暂无数据', retry: '重试', dataAsOf: '数据更新到 {d}',
+    dataStale: '⚠️ 数据已经 {n} 天没更新了（最新是 {d}）。检查 Oura App 有没有同步，或者 Google Sheet 的自动同步是否停了。',
+    rangeN: '{n} 天', lastNNights: '最近 {n} 晚', lastNDays: '最近 {n} 天',
+    trendVs: '和再往前 {n} 天的平均比：{v}', trendSame: '和再往前 {n} 天的平均差不多',
+    alertsTitle: '⚠️ 需要注意', listSep: '、',
+    alertCombo: '最近一晚多项指标同时异常（{list}）。这常见于生病初期或过度疲劳，今天多休息、多喝水。',
+    alertHrvLow: 'HRV 已经连续 {n} 晚低于你的正常范围，身体恢复不足。', alertRhrHigh: '静息心率已经连续 {n} 晚高于你的正常范围。',
+    alertTempHigh: '体温已经连续 {n} 晚高于你的基准，留意是不是要生病了。', alertShortSleep: '最近 {m} 晚里有 {n} 晚睡不到 6 小时。',
+    alertStress: '已经连续 {n} 天压力时间是恢复时间的 2 倍以上。',
+    healthStressTitle: '😮‍💨 压力 vs 恢复', stressLabel: '压力', recoveryLabel: '恢复',
+    stressHeavy: '压力时间远多于恢复，找点时间真正放松一下。', stressMild: '压力比恢复多一些，还在可控范围。', stressBalanced: '恢复时间不少于压力，状态平衡。',
+    stressTotals: '压力共 {s} · 恢复共 {r}', stressDesc: 'Oura 根据白天的心率和 HRV 判断：「压力」是身体处于高压的时长，「恢复」是真正放松的时长。',
+    healthWorkTitle: '💼 工作投入 vs 第二天恢复', workLess3: '工作 < 3 小时', work3to6: '工作 3–6 小时', work6plus: '工作 6 小时以上', workDays: '{n} 天',
+    workResult: '工作 6 小时以上的第二天，恢复分平均 {h}，比工作不到 3 小时的第二天{dir} {d} 分。', lower: '低', higher: '高',
+    workNeedMore: '每组至少要有 3 天才能比较，继续打卡就会出结论。',
+    workNotEnough: '数据还不够：目前只有 {n} 天同时有打卡和 Oura 数据，至少需要 6 天。',
+    workDesc: '按前一天在「今日打卡」里记的总工时分组，看第二天早上的恢复分。共 {n} 天；没打卡的日子不计入。只是平均值对比，不代表因果。',
+    kpiReady: '今日恢复',
     resLimited: '有限', resAdequate: '尚可', resSolid: '稳定', resStrong: '强', resExceptional: '极强',
     noDataShort: '暂无数据',
     bandOptimal: '很好', bandGood: '良好', bandFair: '一般', bandAttention: '需关注',
@@ -51,7 +69,7 @@ const I18N = {
     stage_awake: '清醒', stage_rem: 'REM', stage_light: '浅睡', stage_deep: '深睡',
     stage_awakeDesc: '躺在床上但醒着', stage_remDesc: '做梦期，帮助记忆和情绪', stage_lightDesc: '占比最大，正常', stage_deepDesc: '身体修复，通常占 15–20%',
     inBedLabel: '卧床', asleepLabel: '睡着', efficiencyLabel: '睡眠效率', latencyLabel: '入睡用时',
-    last7Nights: '最近 7 晚', avgAsleep: '平均睡着',
+    avgAsleep: '平均睡着',
     vitalsIntro: '昨晚的数值和你自己近 30 晚的正常范围比，不是和别人比。',
     vHrv: '心率变异性 HRV', vRhr: '静息心率', vSpo2: '血氧', vBreath: '呼吸频率', vTemp: '体温偏差', perMin: '次/分',
     vHrvDesc: '越高通常说明恢复得越好；压力大、喝酒、生病时会降低。', vRhrDesc: '越低通常说明恢复得越好；偏高常见于疲劳、压力或生病。',
@@ -111,7 +129,25 @@ const I18N = {
     tagArchived: ' (archived)', tagWatch: ' (on hold)',
     healthOverviewTitle: '⭕ Today', healthSleepTitle: '🌙 Sleep', healthVitalsTitle: '❤️ Vitals',
     healthActivityTitle: '🏃 Activity', healthAiTitle: '🧠 AI Health Insight',
-    ouraLoadFailed: 'Failed to load, or Oura data source not configured',
+    ouraReadFailed: '❗ Couldn’t read Oura data, so there’s nothing to show. The sync service may be down; try Retry later.', ouraCardFailed: '❗ Read failed', aiReadFailed: '❗ Couldn’t read the AI insight', ouraReadFailedShort: 'read failed',
+    ouraNoData: 'No data yet', retry: 'Retry', dataAsOf: 'Data up to {d}',
+    dataStale: '⚠️ No new data for {n} days (latest is {d}). Check that the Oura app has synced, or that the Google Sheet sync is still running.',
+    rangeN: '{n}d', lastNNights: 'Last {n} nights', lastNDays: 'Last {n} days',
+    trendVs: 'vs the {n} days before: {v}', trendSame: 'about the same as the {n} days before',
+    alertsTitle: '⚠️ Worth a look', listSep: ', ',
+    alertCombo: 'Several signals were off last night ({list}). This often comes with getting sick or overtraining — rest and hydrate today.',
+    alertHrvLow: 'HRV has been below your usual range for {n} nights in a row — recovery is lagging.', alertRhrHigh: 'Resting heart rate has been above your usual range for {n} nights in a row.',
+    alertTempHigh: 'Temperature has been above your baseline for {n} nights — watch for getting sick.', alertShortSleep: '{n} of the last {m} nights were under 6 hours.',
+    alertStress: 'For {n} days in a row, stress time was more than twice your recovery time.',
+    healthStressTitle: '😮‍💨 Stress vs recovery', stressLabel: 'Stress', recoveryLabel: 'Recovery',
+    stressHeavy: 'Far more stress than recovery — make time to really switch off.', stressMild: 'A bit more stress than recovery, still manageable.', stressBalanced: 'Recovery kept up with stress — well balanced.',
+    stressTotals: 'stress {s} · recovery {r}', stressDesc: 'From Oura’s daytime heart rate and HRV: “stress” is time under high load, “recovery” is time truly relaxed.',
+    healthWorkTitle: '💼 Work vs next-day recovery', workLess3: 'Under 3h of work', work3to6: '3–6h of work', work6plus: '6h+ of work', workDays: '{n} days',
+    workResult: 'After days with 6h+ of work, next-morning readiness averages {h} — {d} points {dir} than after days under 3h.', lower: 'lower', higher: 'higher',
+    workNeedMore: 'Each group needs at least 3 days before comparing — keep logging.',
+    workNotEnough: 'Not enough data yet: only {n} days have both a daily log and Oura data; 6 are needed.',
+    workDesc: 'Grouped by total hours logged in Daily Log the day before, against next-morning readiness. {n} days; days with nothing logged are left out. Averages only — not cause and effect.',
+    kpiReady: 'Readiness today',
     resLimited: 'Limited', resAdequate: 'Adequate', resSolid: 'Solid', resStrong: 'Strong', resExceptional: 'Exceptional',
     noDataShort: 'No data',
     bandOptimal: 'Optimal', bandGood: 'Good', bandFair: 'Fair', bandAttention: 'Pay attention',
@@ -125,7 +161,7 @@ const I18N = {
     stage_awake: 'Awake', stage_rem: 'REM', stage_light: 'Light', stage_deep: 'Deep',
     stage_awakeDesc: 'In bed but awake', stage_remDesc: 'Dreaming; memory and mood', stage_lightDesc: 'The largest share, normal', stage_deepDesc: 'Physical repair, usually 15–20%',
     inBedLabel: 'In bed', asleepLabel: 'Asleep', efficiencyLabel: 'Efficiency', latencyLabel: 'Time to fall asleep',
-    last7Nights: 'Last 7 nights', avgAsleep: 'avg asleep',
+    avgAsleep: 'avg asleep',
     vitalsIntro: 'Last night compared with your own usual range over the past 30 nights — not with other people.',
     vHrv: 'Heart rate variability', vRhr: 'Resting heart rate', vSpo2: 'Blood oxygen', vBreath: 'Breathing rate', vTemp: 'Temperature deviation', perMin: '/min',
     vHrvDesc: 'Higher usually means better recovery; stress, alcohol and illness lower it.', vRhrDesc: 'Lower usually means better recovery; fatigue, stress or illness raise it.',
@@ -168,7 +204,7 @@ function applyI18n(){
   setText('appTitle', 'appTitle');
   document.getElementById('langToggle').textContent = LANG === 'zh' ? 'EN' : '中文'; // shows the language you can switch TO
   setText('tab-kanban', 'tabKanban'); setText('tab-tasks', 'tabTasks'); setText('tab-pipeline', 'tabPipeline'); setText('tab-daily', 'tabDaily');
-  setText('tab-health', 'tabHealth'); setText('tab-dash', 'tabDash');
+  updateHealthBadge(); // tab label + ⚠️ when Oura data can't be read or is stale setText('tab-dash', 'tabDash');
   setText('btnStartCheckin', 'btnStartCheckin'); setText('btnAddThread', 'btnAddThread');
   setText('addFormTitle', editingTaskId ? 'formTitleEdit' : 'formTitleAdd');
   setPlaceholder('newTitle', 'placeholderThreadName'); setPlaceholder('newNotes', 'placeholderNotesOptional');
@@ -184,9 +220,9 @@ function applyI18n(){
   document.querySelectorAll('#ctStage option').forEach(o => o.textContent = t('stage' + o.value.charAt(0).toUpperCase() + o.value.slice(1)));
   setText('dailyIntro', 'dailyIntro'); setText('dailyNoteTitle', 'dailyNoteTitle');
   setPlaceholder('dailyNoteInput', 'placeholderDailyNote');
-  setText('healthOverviewTitle', 'healthOverviewTitle'); setText('healthSleepTitle', 'healthSleepTitle'); setText('healthVitalsTitle', 'healthVitalsTitle');
+  setText('healthOverviewTitle', 'healthOverviewTitle'); setText('healthSleepTitle', 'healthSleepTitle'); setText('healthVitalsTitle', 'healthVitalsTitle'); setText('healthStressTitle', 'healthStressTitle'); setText('healthWorkTitle', 'healthWorkTitle');
   setText('healthActivityTitle', 'healthActivityTitle'); setText('healthAiTitle', 'healthAiTitle');
-  ['ouraOverviewCard','ouraSleepCard','ouraVitalsCard','ouraActivityCard','ouraAnalysisCard'].forEach(id => {
+  ['ouraOverviewCard','ouraSleepCard','ouraVitalsCard','ouraStressCard','ouraWorkCard','ouraActivityCard','ouraAnalysisCard'].forEach(id => {
     const el = document.getElementById(id);
     if(el && (el.textContent === I18N.zh.loading || el.textContent === I18N.en.loading)) el.textContent = t('loading');
   });

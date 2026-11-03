@@ -30,10 +30,9 @@ function daysBetween(dateStr){
 
 async function renderHealthOverview(){
   await loadOuraRows();
-  renderOuraOverview();
-  renderOuraSleep();
-  renderOuraVitals();
-  renderOuraActivity();
+  renderHealthStatus(); renderHealthAlerts();
+  renderOuraOverview(); renderOuraSleep(); renderOuraVitals();
+  renderStressRecovery(); renderWorkRecovery(); renderOuraActivity();
   loadOuraAnalysis();
 }
 
@@ -128,7 +127,13 @@ function renderDashboard(){
     kpi(t('kpiHours'), Math.round(weekHours * 10) / 10, 'h') +
     kpi(t('kpiDoing'), state.items.filter(x => x.status === 'doing').length) +
     kpi(t('kpiWaiting'), nWaiting ? `⚠️ ${nWaiting}` : 0) +
-    kpi(t('kpiDone'), doneWeek.length);
+    kpi(t('kpiDone'), doneWeek.length) +
+    kpi(t('kpiReady'), (() => { // today's readiness from Oura, so planning the day can take recovery into account
+      if(ouraStatus === 'failed') return `<span class="kpi-warn" onclick="switchTab('health')">⚠️ ${t('ouraReadFailedShort')}</span>`;
+      const r = latestRowWithFields(['Readiness Score']);
+      if(!r) return '–';
+      return `<span onclick="switchTab('health')" style="cursor:pointer">${r['Readiness Score']}</span>${ouraAge() >= 2 ? `<small>⚠️ ${mdStr(r["Date"])}</small>` : `<small>${scoreBand(+r['Readiness Score'])}</small>`}`;
+    })());
 
   // Task status split per project: todo (inbox/backlog/ready) → doing → waiting → done.
   // Project progress, split into "needs attention" (with a direct action) and a collapsed "on track" list.
