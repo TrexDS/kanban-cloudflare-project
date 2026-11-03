@@ -200,11 +200,19 @@ function renderOuraSleep(){
 
 /* ---- Vitals: last night vs. your own usual range (Apple Vitals style) ---- */
 // good: which direction is better (+1 higher, -1 lower, 0 = neither; only stability matters)
+// ref = general healthy-adult benchmark (fixed, sourced — not AI):
+//   HRV: women aged 40–49, heart-rate-corrected RMSSD 10th–90th percentile 18.6–71.5 ms, median 35.8
+//        (van den Berg et al. 2018, Front Physiol, corrigendum Table S5: https://pmc.ncbi.nlm.nih.gov/articles/PMC6839701/;
+//        10-second ECG, not a nightly ring average — a rough benchmark only)
+//   Resting HR: 60–100 bpm for adults (Mayo Clinic: https://www.mayoclinic.org/heart-rate/expert-answers/faq-20057979)
+//   SpO2: nightly average 95–100% (Oura: https://support.ouraring.com/hc/en-us/articles/7328398760851)
+//   Breathing rate: 12–20 /min for healthy adults (Oura: https://support.ouraring.com/hc/en-us/articles/360025443174)
+//   Temperature deviation is relative to your own baseline by definition, so it has no population benchmark.
 const VITALS = [
-  { f: 'Avg HRV', key: 'vHrv', unit: 'ms', good: 1, floor: 2, dp: 0 },
-  { f: 'Avg Resting HR', key: 'vRhr', unit: 'bpm', good: -1, floor: 2, dp: 0 },
-  { f: 'Avg SpO2 %', key: 'vSpo2', unit: '%', good: 1, floor: 0.5, dp: 1, zeroIsMissing: true },
-  { f: 'Avg Breath Rate', key: 'vBreath', unit: t => t('perMin'), good: 0, floor: 0.5, dp: 1 },
+  { f: 'Avg HRV', key: 'vHrv', unit: 'ms', good: 1, floor: 2, dp: 0, ref: [18.6, 71.5] },
+  { f: 'Avg Resting HR', key: 'vRhr', unit: 'bpm', good: -1, floor: 2, dp: 0, ref: [60, 100] },
+  { f: 'Avg SpO2 %', key: 'vSpo2', unit: '%', good: 1, floor: 0.5, dp: 1, zeroIsMissing: true, ref: [95, 100] },
+  { f: 'Avg Breath Rate', key: 'vBreath', unit: t => t('perMin'), good: 0, floor: 0.5, dp: 1, ref: [12, 20] },
   { f: 'Temperature Deviation', key: 'vTemp', unit: '°C', good: 0, floor: 0.2, dp: 2, signed: true }
 ];
 // Usual range for night i = that metric's previous 30 nights, mean ± 1 SD (floored so a very steady metric doesn't flag noise).
@@ -236,6 +244,18 @@ function sparkSVG(vals, u, worse, fmt){
     <line x1="${X(vals.length - 1).toFixed(1)}" y1="${Y(last.x).toFixed(1)}" x2="${X(vals.length - 1).toFixed(1)}" y2="${Y(last.x).toFixed(1)}" stroke="${worse ? 'var(--watch)' : 'var(--active)'}" stroke-width="9" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
   </svg>`;
 }
+// Where last night sits against the general benchmark: a bar with the benchmark zone and your value.
+function refStatus(v, x){ return !v.ref ? null : x < v.ref[0] ? -1 : x > v.ref[1] ? 1 : 0; }
+const refText = v => v.ref.map(y => +y.toFixed(v.dp)).join('–'); // 95–100, not 95.0–100.0
+function refHtml(v, x, fmt, unit){
+  if(!v.ref) return `<div class="ref-row sub">${t('refNone')}</div>`;
+  const [lo, hi] = v.ref, dir = refStatus(v, x), worse = dir !== 0 && (v.good === 0 || dir !== v.good);
+  const span = hi - lo, min = Math.min(lo - span * 0.25, x), max = Math.max(hi + span * 0.25, x), pos = y => ((y - min) / (max - min) * 100).toFixed(1) + '%';
+  const label = dir === 0 ? t('refIn') : t(dir < 0 ? 'refBelow' : 'refAbove');
+  return `<div class="ref-row"><span class="ref-label">${t('refRange')} ${refText(v)} ${unit}</span>
+    <span class="ref-track" data-tip="${t('refRange')} ${refText(v)} ${unit} · ${fmt(x)}"><span class="ref-band" style="left:${pos(lo)}; width:calc(${pos(hi)} - ${pos(lo)})"></span><span class="ref-dot${worse ? ' warn' : ''}" style="left:${pos(x)}"></span></span>
+    <span class="${worse ? 'vital-warn' : 'vital-ok'}">${label}</span></div>`;
+}
 function renderOuraVitals(){
   const el = document.getElementById('ouraVitalsCard');
   const rows = VITALS.map(v => {
@@ -251,12 +271,14 @@ function renderOuraVitals(){
     return `<div class="vital">${head}
       ${sparkSVG(flags.slice(-healthRange), u, worse, x => fmt(x) + ' ' + unit)}
       <div class="vital-foot"><span class="${worse ? 'vital-warn' : 'vital-ok'}">${status}</span><span class="sub">${t('usualRange')} ${fmt(u.lo)}–${fmt(u.hi)}</span></div>
+      ${refHtml(v, cur.x, fmt, unit)}
       ${trendLine(flags.map(f => f.x), x => x.toFixed(v.dp) + ' ' + unit)}
       <div class="sub" style="font-size:11.5px;">${t(v.key + 'Desc')}</div>
     </div>`;
   }).join('');
   el.innerHTML = rows ? `<div class="sub" style="margin-bottom:8px;">${t('vitalsIntro')}</div>${rows}
-    <div class="vital-legend sub"><span><i class="vital-band-key"></i>${t('usualRange')}</span><span><i class="vital-dot-key"></i>${t('lastNight')}</span></div>`
+    <div class="vital-legend sub"><span><i class="vital-band-key"></i>${t('usualRange')}</span><span><i class="ref-band-key"></i>${t('refRange')}</span><span><i class="vital-dot-key"></i>${t('lastNight')}</span></div>
+    <div class="sub" style="font-size:11px; margin-top:6px;">${t('refSources')}</div>`
     : `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`;
 }
 
@@ -341,6 +363,13 @@ function healthAlerts(){
   if(off.length >= 2) out.push(['bad', t('alertCombo').replace('{list}', off.map(([k]) => t(k)).join(t('listSep')))]);
   [['vHrv', -1, 3, 'alertHrvLow'], ['vRhr', 1, 3, 'alertRhrHigh'], ['vTemp', 1, 2, 'alertTempHigh']].forEach(([k, d, min, key]) => {
     const n = streakOf(F[k], d); if(n >= min) out.push(['warn', t(key).replace('{n}', n)]);
+  });
+  VITALS.filter(v => v.ref).forEach(v => {
+    const xs = F[v.key].slice(-7).map(f => f.x); if(xs.length < 5) return;
+    const a = average(xs), dir = refStatus(v, a);
+    const unit = typeof v.unit === 'function' ? v.unit(t) : v.unit;
+    if(dir !== 0 && (v.good === 0 || dir !== v.good)) out.push(['warn', t(dir < 0 ? 'alertRefLow' : 'alertRefHigh').replace('{m}', t(v.key)).replace('{v}', `${a.toFixed(v.dp)} ${unit}`)
+      .replace('{r}', `${refText(v)} ${unit}`)]);
   });
   const nights = ouraRows.filter(r => num(r['Total Sleep (min)'])).slice(-5), short = nights.filter(r => num(r['Total Sleep (min)']) < 360).length;
   if(nights.length >= 3 && short >= 3) out.push(['warn', t('alertShortSleep').replace('{n}', short).replace('{m}', nights.length)]);
