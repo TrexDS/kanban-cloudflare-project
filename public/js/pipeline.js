@@ -1,5 +1,29 @@
 /* ---- Pipeline ---- */
-function toggleForm(id){ document.getElementById(id).classList.toggle('show'); }
+let editingPipeline = null; // { kind, id } while the company/contact form edits an existing entry
+function toggleForm(id){
+  const el = document.getElementById(id), f = id === 'companyForm' ? 'co' : 'ct';
+  editingPipeline = null;
+  if(!el.classList.contains('show')){ document.getElementById(f+'Name').value = ''; document.getElementById(f+'Notes').value = ''; }
+  el.classList.toggle('show');
+}
+function editPipelineItem(kind, id){
+  const item = (kind === 'company' ? pipeline.companies : pipeline.contacts).find(x => x.id === id);
+  if(!item) return;
+  const f = kind === 'company' ? 'co' : 'ct', form = document.getElementById(kind + 'Form');
+  editingPipeline = { kind, id };
+  document.getElementById(f+'Name').value = item.name;
+  document.getElementById(f+'Stage').value = item.stage;
+  document.getElementById(f+'Notes').value = item.notes || '';
+  form.classList.add('show');
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+// Add a new entry, or update the one being edited.
+function upsertPipeline(kind, list, name, stage, notes){
+  const item = editingPipeline && editingPipeline.kind === kind && list.find(x => x.id === editingPipeline.id);
+  if(item) Object.assign(item, { name, stage, notes, updatedAt: Date.now() });
+  else list.push({ id: uid(), name, stage, notes, updatedAt: Date.now() });
+  return item ? 'toastSaved' : 'toastAdded';
+}
 function stageLabel(s){ return t('stage' + s.charAt(0).toUpperCase() + s.slice(1)); }
 const stageClass = {
   applied:'stage-applied', screen:'stage-screen', interview:'stage-interview', final:'stage-final',
@@ -14,28 +38,35 @@ async function addCompany(){
   const stage = document.getElementById('coStage').value;
   const notes = document.getElementById('coNotes').value.trim();
   if(!name){ showToast(t('toastNeedCompanyName')); return; }
-  pipeline.companies.push({ id: uid(), name, stage, notes, updatedAt: Date.now() });
+  const msg = upsertPipeline('company', pipeline.companies, name, stage, notes);
   document.getElementById('coName').value=''; document.getElementById('coNotes').value='';
-  toggleForm('companyForm'); await savePipeline(); renderPipeline(); renderDashboard(); showToast(t('toastAdded'));
+  toggleForm('companyForm');
+  if(!await savePipeline()) return;
+  renderPipeline(); renderDashboard(); showToast(t(msg));
 }
 async function addContact(){
   const name = document.getElementById('ctName').value.trim();
   const stage = document.getElementById('ctStage').value;
   const notes = document.getElementById('ctNotes').value.trim();
   if(!name){ showToast(t('toastNeedContactInfo')); return; }
-  pipeline.contacts.push({ id: uid(), name, stage, notes, updatedAt: Date.now() });
+  const msg = upsertPipeline('contact', pipeline.contacts, name, stage, notes);
   document.getElementById('ctName').value=''; document.getElementById('ctNotes').value='';
-  toggleForm('contactForm'); await savePipeline(); renderPipeline(); showToast(t('toastAdded'));
+  toggleForm('contactForm');
+  if(!await savePipeline()) return;
+  renderPipeline(); showToast(t(msg));
 }
 async function updateStage(kind, id, newStage){
   const list = kind === 'company' ? pipeline.companies : pipeline.contacts;
   const item = list.find(x => x.id === id);
-  if(item){ item.stage = newStage; item.updatedAt = Date.now(); await savePipeline(); renderPipeline(); renderDashboard(); showToast(t('toastUpdated')); }
+  if(item){ item.stage = newStage; item.updatedAt = Date.now(); if(!await savePipeline()) return; renderPipeline(); renderDashboard(); showToast(t('toastUpdated')); }
 }
 async function deletePipelineItem(kind, id){
+  const item = (kind === 'company' ? pipeline.companies : pipeline.contacts).find(x => x.id === id);
+  if(!item || !confirm(t('confirmDelete').replace('{name}', item.name))) return;
   if(kind === 'company'){ pipeline.companies = pipeline.companies.filter(x => x.id !== id); }
   else { pipeline.contacts = pipeline.contacts.filter(x => x.id !== id); }
-  await savePipeline(); renderPipeline(); renderDashboard(); showToast(t('toastDeleted'));
+  if(!await savePipeline()) return;
+  renderPipeline(); renderDashboard(); showToast(t('toastDeleted'));
 }
 function pipelineCardHtml(item, kind, options){
   const opts = options.map(s => `<option value="${s}" ${s===item.stage?'selected':''}>${stageLabel(s)}</option>`).join('');
@@ -47,6 +78,7 @@ function pipelineCardHtml(item, kind, options){
     ${kind === 'company' ? appTasksHtml(item) : ''}
     <div class="card-actions">
       <select class="stage-select" onchange="updateStage('${kind}','${item.id}',this.value)">${opts}</select>
+      <button class="chip" onclick="editPipelineItem('${kind}','${item.id}')">${t('chipEdit')}</button>
       <button class="chip" onclick="deletePipelineItem('${kind}','${item.id}')">${t('chipDelete')}</button>
     </div>
   </div>`;
@@ -78,7 +110,8 @@ async function setAppProject(id, projectId){
   if(!app) return;
   app.projectId = projectId || undefined; app.updatedAt = Date.now();
   openApps.add(id);
-  await savePipeline(); renderPipeline(); showToast(t('toastUpdated'));
+  if(!await savePipeline()) return;
+  renderPipeline(); showToast(t('toastUpdated'));
 }
 function renderPipeline(){
   renderFunnel();

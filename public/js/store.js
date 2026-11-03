@@ -140,13 +140,32 @@ async function confirmUseSeedTasks(){
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
+// 保存失败时本页内存已经比云端"超前"，换回云端版本，界面就不会显示没存上的改动。
+async function revertToCloud(key){
+  try{
+    const val = await kvGetWithRetry(key);
+    if(val){
+      if(key === STORAGE_KEY){ state = val; state.items = state.items || []; }
+      else if(key === PIPELINE_KEY) pipeline = val;
+      else if(key === DAILY_KEY) dailyLog = val;
+    }
+    render(); renderPipeline(); renderDaily(); renderDashboard();
+    return true;
+  }catch(e){
+    console.error('reload after failed save', e);
+    return false;
+  }
+}
+
 async function trySave(key, dataObj, label){
   for(let attempt=0; attempt<3; attempt++){
     try{
       const ok = await kvSet(key, dataObj);
       if(ok === 'conflict'){
-        // 不重试、不覆盖：刷新会拿到云端最新版本，本页这次的改动不会保存
-        showToast('云端数据已在其他设备/标签页更新，这次修改没有保存，请刷新页面后再改');
+        // 不重试、不覆盖：换成云端最新版本，本页这次的改动不会保存
+        showToast(await revertToCloud(key)
+          ? '云端数据已在其他设备/标签页更新，这次修改没有保存，已换成最新版本，请重新操作'
+          : '云端数据已在其他设备/标签页更新，这次修改没有保存，请刷新页面后再改');
         return false;
       }
       if(ok) return true;
@@ -155,7 +174,9 @@ async function trySave(key, dataObj, label){
     }
     if(attempt<2) await sleep(600);
   }
-  showToast('保存失败，请检查网络后重试');
+  showToast(await revertToCloud(key)
+    ? '保存失败，界面已恢复成云端版本，请检查网络后重试'
+    : '保存失败，这次修改没有存上，请检查网络后刷新页面');
   return false;
 }
 

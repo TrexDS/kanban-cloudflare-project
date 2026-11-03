@@ -103,7 +103,9 @@ const I18N = {
     lcExploringDesc: '还在试水，没决定要不要投入', lcActiveDesc: '当前主力投入', lcMaintainingDesc: '已成型，定期少量投入', lcOnHoldDesc: '暂停，以后可能恢复', lcArchivedDesc: '已结束',
     tsInbox: '收件箱', tsBacklog: '待排', tsReady: '可开始', tsDoing: '进行中', tsWaiting: '等待 / 受阻', tsDone: '完成',
     tasksSummary: '任务', placeholderNewTask: '新任务…', btnAdd: '添加',
-    appNoProject: '未关联 Project', appPickProject: '先关联一个 Project 再添加任务'
+    appNoProject: '未关联 Project', appPickProject: '先关联一个 Project 再添加任务',
+    confirmDeleteProject: '删除「{name}」？它下面的 {n} 个任务会一起删除，无法撤销。', confirmDelete: '删除「{name}」？无法撤销。',
+    taskNoApp: '不关联申请', placeholderTaskNote: '备注 / 等待原因（可选）', taskMoveHasHours: '这个任务已记过工时，不能换 Project（否则历史工时会对不上）'
   },
   en: {
     appTitle: '🗂️ Multi-Thread Task Board', pageTitle: 'Multi-Thread Task Board',
@@ -199,7 +201,9 @@ const I18N = {
     lcExploringDesc: 'Trying it out, not committed yet', lcActiveDesc: 'Main focus right now', lcMaintainingDesc: 'Established, light regular upkeep', lcOnHoldDesc: 'Paused, may resume later', lcArchivedDesc: 'Finished',
     tsInbox: 'Inbox', tsBacklog: 'Backlog', tsReady: 'Ready', tsDoing: 'In Progress', tsWaiting: 'Waiting / Blocked', tsDone: 'Done',
     tasksSummary: 'Tasks', placeholderNewTask: 'New task…', btnAdd: 'Add',
-    appNoProject: 'No project', appPickProject: 'Link a project to add tasks'
+    appNoProject: 'No project', appPickProject: 'Link a project to add tasks',
+    confirmDeleteProject: 'Delete "{name}"? Its {n} task(s) will be deleted too. This cannot be undone.', confirmDelete: 'Delete "{name}"? This cannot be undone.',
+    taskNoApp: 'No application', placeholderTaskNote: 'Note / what it is waiting on (optional)', taskMoveHasHours: 'This task has logged hours, so it cannot move to another project (past hours would no longer add up)'
   }
 };
 function t(key){ return (I18N[LANG] && I18N[LANG][key] !== undefined) ? I18N[LANG][key] : (I18N.zh[key] !== undefined ? I18N.zh[key] : key); }

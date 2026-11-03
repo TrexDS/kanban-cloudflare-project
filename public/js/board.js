@@ -2,7 +2,7 @@ function render(){
   // One board column per lifecycle state (LIFECYCLE key order = column order).
   document.getElementById('board').innerHTML = Object.keys(LIFECYCLE).map(lc => {
     const list = state.tasks.filter(p => lifecycleOf(p) === lc);
-    return `<div class="col">
+    return `<div class="col" ondragover="dragOver(event)" ondrop="dropOn(event,'lc','${lc}')">
       <div class="col-head"><span class="dot ${LIFECYCLE[lc]}"></span><span class="col-title">${t(LC_LABEL[lc])}</span><span class="col-count">${list.length ? `(${list.length})` : ''}</span></div>
       <p class="col-desc">${t(LC_LABEL[lc] + 'Desc')}</p>
       ${list.length ? list.map(cardHtml).join('') : `<div class="empty">${t('emptyNone')}</div>`}
@@ -27,7 +27,7 @@ async function setLifecycle(id, lc){
   p.column = LIFECYCLE[lc];
   if(lc === 'exploring' || lc === 'maintaining') p.phase = lc; else delete p.phase;
   p.updatedAt = Date.now();
-  await saveState(); render(); renderDaily(); renderDashboard(); showToast(t('toastUpdated'));
+  if(!await saveState()) return; render(); renderDaily(); renderDashboard(); showToast(t('toastUpdated'));
 }
 
 const TASK_STATUS = ['inbox','backlog','ready','doing','waiting','done'];
@@ -64,7 +64,7 @@ async function addItem(e, projectId, applicationId){
   state.items.push(item);
   e.target.elements.title.value = '';
   openProjects.add(projectId);
-  await saveState(); render(); showToast(t('toastAdded'));
+  if(!await saveState()) return; render(); showToast(t('toastAdded'));
 }
 let taskFilter = '';
 function taskTotalHours(taskId){ return Object.values(dailyLog.entries).reduce((sum, e) => sum + taskHoursOf(e, taskId), 0); }
@@ -92,14 +92,16 @@ function renderTasks(){
   const title = id => (state.tasks.find(p => p.id === id) || {}).title || '';
   document.getElementById('taskBoard').innerHTML = TASK_STATUS.map(st => {
     const list = items.filter(x => x.status === st);
-    return `<div class="col">
+    return `<div class="col" ondragover="dragOver(event)" ondrop="dropOn(event,'ts','${st}')">
       <div class="col-head"><span class="col-title">${t(TS_LABEL[st])}</span><span class="col-count">${list.length ? `(${list.length})` : ''}</span></div>
-      ${list.length ? list.map(it => `<div class="card ts-${st}">
-          <p class="card-title">${escapeHtml(it.title)}</p>
+      ${list.length ? list.map(it => it.id === editingItemId ? taskEditHtml(it) : `<div class="card ts-${st}">
+          <p class="card-title" draggable="true" ondragstart="dragStart(event,'ts','${it.id}')" ondragend="dragging=null">${escapeHtml(it.title)}</p>
           <p class="task-project">${escapeHtml(title(it.projectId))}${appName(it.applicationId) ? ` · ${escapeHtml(appName(it.applicationId))}` : ''}</p>
+          ${it.note ? `<p class="card-notes">${escapeHtml(it.note)}</p>` : ''}
           ${taskLogHtml(it)}
           <div class="card-actions">
             <select class="stage-select" onchange="setTaskStatus('${it.id}',this.value)">${TASK_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${t(TS_LABEL[s])}</option>`).join('')}</select>
+            <button class="chip" onclick="editingItemId='${it.id}'; renderTasks()">${t('chipEdit')}</button>
             <button class="chip" onclick="deleteItem('${it.id}')">${t('chipDelete')}</button>
           </div>
         </div>`).join('') : `<div class="empty">${t('emptyNone')}</div>`}
@@ -110,11 +112,60 @@ async function setTaskStatus(id, status){
   const it = state.items.find(x => x.id === id);
   if(!it || !TASK_STATUS.includes(status)) return;
   it.status = status; it.updatedAt = Date.now();
-  await saveState(); render(); showToast(t('toastUpdated'));
+  if(!await saveState()) return; render(); showToast(t('toastUpdated'));
 }
 async function deleteItem(id){
+  const it = state.items.find(x => x.id === id);
+  if(!it || !confirm(t('confirmDelete').replace('{name}', it.title))) return;
   state.items = state.items.filter(x => x.id !== id);
-  await saveState(); render(); showToast(t('toastDeleted'));
+  if(!await saveState()) return;
+  render(); showToast(t('toastDeleted'));
+}
+
+let editingItemId = null;
+function taskEditHtml(it){
+  // Hours are booked per project in the daily log; moving a task with hours would split its history across projects.
+  const locked = taskTotalHours(it.id) > 0;
+  const projects = state.tasks.filter(p => p.column !== 'archived' || p.id === it.projectId);
+  return `<form class="card task-edit" onsubmit="saveItemEdit(event,'${it.id}')">
+      <input name="title" value="${escapeHtml(it.title)}" aria-label="${t('placeholderNewTask')}">
+      <select class="stage-select" name="project" aria-label="Project" ${locked ? 'disabled' : ''}>${projects.map(p => `<option value="${p.id}" ${p.id===it.projectId?'selected':''}>${escapeHtml(p.title)}</option>`).join('')}</select>
+      ${locked ? `<p class="sub" style="font-size:11.5px; margin:0;">${t('taskMoveHasHours')}</p>` : ''}
+      <select class="stage-select" name="application" aria-label="Application"><option value="">${t('taskNoApp')}</option>${pipeline.companies.map(a => `<option value="${a.id}" ${a.id===it.applicationId?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}</select>
+      <input name="note" value="${escapeHtml(it.note || '')}" placeholder="${t('placeholderTaskNote')}" aria-label="${t('placeholderTaskNote')}">
+      <div class="card-actions"><button class="chip">${t('btnSave')}</button><button type="button" class="chip" onclick="editingItemId=null; renderTasks()">${t('btnCancel')}</button></div>
+    </form>`;
+}
+async function saveItemEdit(e, id){
+  e.preventDefault();
+  const it = state.items.find(x => x.id === id), f = e.target.elements;
+  const title = f.title.value.trim(), note = f.note.value.trim();
+  if(!it || !title) return;
+  it.title = title;
+  if(taskTotalHours(id) === 0 && state.tasks.some(p => p.id === f.project.value)) it.projectId = f.project.value;
+  if(f.application.value) it.applicationId = f.application.value; else delete it.applicationId;
+  if(note) it.note = note; else delete it.note;
+  if(it.status !== 'done') it.updatedAt = Date.now(); // a done task's updatedAt = when it finished (Done this week reads it)
+  editingItemId = null;
+  if(!await saveState()) return;
+  render(); renderDaily(); showToast(t('toastSaved'));
+}
+
+// Drag a card by its title onto another column. Native HTML5 drag: no touch support, the dropdowns stay for phones.
+let dragging = null;
+function dragStart(e, kind, id){ dragging = { kind, id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); }
+function dragOver(e){ if(dragging) e.preventDefault(); }
+function dropOn(e, kind, value){
+  e.preventDefault();
+  const d = dragging; dragging = null;
+  if(!d || d.kind !== kind) return;
+  if(kind === 'lc'){
+    const p = state.tasks.find(x => x.id === d.id);
+    if(p && lifecycleOf(p) !== value) setLifecycle(d.id, value);
+  } else {
+    const it = state.items.find(x => x.id === d.id);
+    if(it && it.status !== value) setTaskStatus(d.id, value);
+  }
 }
 
 function cardHtml(task){
@@ -124,7 +175,7 @@ function cardHtml(task){
   actions.push(`<button class="chip" onclick="editTask('${task.id}')">${t('chipEdit')}</button>`);
   actions.push(`<button class="chip" onclick="deleteTask('${task.id}')">${t('chipDelete')}</button>`);
   return `<div class="card ${task.column}">
-      <p class="card-title">${escapeHtml(task.title)}</p>
+      <p class="card-title" draggable="true" ondragstart="dragStart(event,'lc','${task.id}')" ondragend="dragging=null">${escapeHtml(task.title)}</p>
       ${task.notes ? `<p class="card-notes">${escapeHtml(task.notes)}</p>` : ''}
       <p class="card-meta">${t('metaUpdatedPrefix')}${fmtDate(task.updatedAt)}</p>
       ${tasksHtml(task)}
@@ -137,9 +188,13 @@ function escapeHtml(s){
 }
 
 async function deleteTask(id){
+  const p = state.tasks.find(x => x.id === id);
+  const n = state.items.filter(x => x.projectId === id).length;
+  if(!p || !confirm(t(n ? 'confirmDeleteProject' : 'confirmDelete').replace('{name}', p.title).replace('{n}', n))) return;
   state.tasks = state.tasks.filter(x => x.id !== id);
   state.items = state.items.filter(x => x.projectId !== id);
-  await saveState(); render(); renderDaily(); showToast(t('toastDeleted'));
+  if(!await saveState()) return;
+  render(); renderDaily(); showToast(t('toastDeleted'));
 }
 let editingTaskId = null;
 function toggleAddForm(){
@@ -176,7 +231,8 @@ async function addTask(){
   }
   document.getElementById('newTitle').value = ''; document.getElementById('newNotes').value = '';
   document.getElementById('addForm').classList.remove('show');
-  await saveState(); render(); renderDaily(); showToast(t('toastSaved'));
+  if(!await saveState()) return;
+  render(); renderDaily(); showToast(t('toastSaved'));
 }
 
 function checkinProgressText(i, n){

@@ -305,3 +305,6 @@
   .alert-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin:0 8px 1px 0; background:var(--stress);}
   .alert-dot.bad{background:var(--warn);}
 
+  .card-title[draggable="true"]{cursor:grab;}
+  .task-edit{display:flex; flex-direction:column; gap:6px;}
+  .task-edit input{border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-family:inherit; font-size:13px;}
