@@ -53,7 +53,10 @@
     .tasks-board{grid-template-columns:repeat(6, minmax(0,1fr)); gap:12px;}
     .board .col{background:#efede7; border-radius:16px; padding:12px; margin-bottom:0;}
     .add-form{max-width:560px;}
-    #view-pipeline, #view-daily, #view-health, #view-dash{max-width:900px;}
+    #view-pipeline, #view-daily, #view-health{max-width:900px;}
+    .dash-grid{display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:18px; align-items:start;}
+    .dash-grid .panel{background:#efede7; border-radius:16px; padding:4px 16px 14px; margin-bottom:18px;}
+    .dash-grid .panel .dash-section-title{margin-top:12px;}
     #list-companies, #list-contacts{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px;}
     #list-companies .card, #list-contacts .card{margin-bottom:0;}
   }
@@ -79,6 +82,12 @@
   .seg-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--sub); margin:-2px 0 8px;}
   .seg-legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px;}
   .seg-counts{font-size:12px; color:var(--sub);}
+  .panel-head{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .acc-toggle{display:flex; gap:4px; margin-top:12px;}
+  .acc-toggle .chip.on{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .acc-chart{position:relative; height:220px;}
+  .acc-chart svg{display:block; width:100%; height:100%; overflow:visible;}
+  .acc-chart text{font-size:10.5px; fill:var(--sub);}
   /* Series slots (validated: 4 hues + gray "other"); a project keeps its slot by all-time hours rank. */
   :root{ --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s-other:#6f6b62; }
   .wk-chart{display:flex; align-items:flex-end; gap:6px; height:190px; padding:18px 0 0; border-bottom:1px solid #dcd8ce;}
@@ -332,19 +341,43 @@
   <div class="view" id="view-dash">
     <div class="kpi-row" id="kpiRow"></div>
     <div id="budgetCards"></div>
-    <div class="dash-section-title" id="dashWeeksTitle">📊 每周投入（近 12 周）</div>
-    <div class="seg-legend" id="weeksLegend"></div>
-    <div class="wk-chart" id="weeksChart"></div>
-    <div class="wk-labels" id="weeksLabels"></div>
-    <div class="dash-section-title" id="dashProgressTitle">🧭 项目推进</div>
-    <div class="seg-legend" id="segLegend"></div>
-    <div id="projectProgress"></div>
-    <div class="dash-section-title" id="dashDoneTitle">✅ 本周完成</div>
-    <div id="doneList"></div>
-    <div class="dash-section-title" id="dashProjTotalTitle">⏱️ 项目累计投入</div>
-    <div id="projTotals"></div>
-    <div class="dash-section-title" id="dashTopTasksTitle">🔥 最费时的任务</div>
-    <div id="topTasks"></div>
+    <div class="dash-grid">
+      <div class="dash-main">
+        <section class="panel">
+          <div class="dash-section-title" id="dashWeeksTitle">📊 每周投入（近 12 周）</div>
+          <div class="seg-legend" id="weeksLegend"></div>
+          <div class="wk-chart" id="weeksChart"></div>
+          <div class="wk-labels" id="weeksLabels"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div class="dash-section-title" id="dashAccTitle">📈 累计投入</div>
+            <div class="acc-toggle" id="accToggle"></div>
+          </div>
+          <div class="seg-legend" id="accLegend"></div>
+          <div id="accChart" class="acc-chart"></div>
+        </section>
+        <section class="panel">
+          <div class="dash-section-title" id="dashProjTotalTitle">⏱️ 项目累计投入</div>
+          <div id="projTotals"></div>
+        </section>
+      </div>
+      <div class="dash-side">
+        <section class="panel">
+          <div class="dash-section-title" id="dashProgressTitle">🧭 项目推进</div>
+          <div class="seg-legend" id="segLegend"></div>
+          <div id="projectProgress"></div>
+        </section>
+        <section class="panel">
+          <div class="dash-section-title" id="dashDoneTitle">✅ 本周完成</div>
+          <div id="doneList"></div>
+        </section>
+        <section class="panel">
+          <div class="dash-section-title" id="dashTopTasksTitle">🔥 最费时的任务</div>
+          <div id="topTasks"></div>
+        </section>
+      </div>
+    </div>
   <div class="viz-tip" id="vizTip" role="tooltip"></div>
   </div>
 </main>
@@ -431,7 +464,7 @@ const I18N = {
     weeklyEmpty: '还没有打卡记录',
     funnelTitle: '🎯 求职漏斗',
     logUnassigned: '其他（不指定任务）', todayShort: '今天', totalShort: '累计',
-    weeksTitle: '📊 每周投入（近 12 周）', otherProjects: '其他项目', weekOf: '周',
+    weeksTitle: '📊 每周投入（近 12 周）', accTitle: '📈 累计投入', accTotal: '总计', accByProject: '按项目', accUntil: '截至', otherProjects: '其他项目', weekOf: '周',
     projTotalTitle: '⏱️ 项目累计投入', unassignedTask: '未指定任务', topTasksTitle: '🔥 最费时的任务', topTasksEmpty: '还没有记到任务上的时间',
     kpiHours: '本周投入', kpiDoing: '进行中任务', kpiWaiting: '等待 / 受阻', kpiDone: '本周完成', segTodo: '待办',
     progressTitle: '🧭 项目推进', progressEmpty: '没有进行中的项目', noTasksYet: '还没有任务',
@@ -493,7 +526,7 @@ const I18N = {
     weeklyEmpty: 'No hours logged yet',
     funnelTitle: '🎯 Job Funnel',
     logUnassigned: 'Other (no task)', todayShort: 'Today', totalShort: 'Total',
-    weeksTitle: '📊 Hours per week (last 12)', otherProjects: 'Other projects', weekOf: 'Week of',
+    weeksTitle: '📊 Hours per week (last 12)', accTitle: '📈 Accumulated hours', accTotal: 'Total', accByProject: 'By project', accUntil: 'As of', otherProjects: 'Other projects', weekOf: 'Week of',
     projTotalTitle: '⏱️ Total hours by project', unassignedTask: 'No task', topTasksTitle: '🔥 Most time-consuming tasks', topTasksEmpty: 'No time logged on tasks yet',
     kpiHours: 'Hours this week', kpiDoing: 'Tasks in progress', kpiWaiting: 'Waiting / blocked', kpiDone: 'Done this week', segTodo: 'To do',
     progressTitle: '🧭 Project Progress', progressEmpty: 'No projects in progress', noTasksYet: 'No tasks yet',
@@ -538,7 +571,7 @@ function applyI18n(){
     const el = document.getElementById(id);
     if(el && (el.textContent === I18N.zh.loading || el.textContent === I18N.en.loading)) el.textContent = t('loading');
   });
-  setText('dashWeeksTitle', 'weeksTitle'); setText('dashProjTotalTitle', 'projTotalTitle'); setText('dashTopTasksTitle', 'topTasksTitle'); setText('dashFunnelTitle', 'funnelTitle');
+  setText('dashWeeksTitle', 'weeksTitle'); setText('dashAccTitle', 'accTitle'); setText('dashProjTotalTitle', 'projTotalTitle'); setText('dashTopTasksTitle', 'topTasksTitle'); setText('dashFunnelTitle', 'funnelTitle');
   setText('dashProgressTitle', 'progressTitle'); setText('dashDoneTitle', 'doneTitle');
   setText('modalTitle', 'modalTitle'); setText('modalContinueBtn', 'modalContinue'); setText('modalHoldBtn', 'modalHold');
   setText('modalDoneBtn', 'modalDone'); setText('modalSkipBtn', 'modalSkip');
@@ -1665,6 +1698,8 @@ function renderDashboard(){
   }).join('');
   document.getElementById('weeksLabels').innerHTML = weekData.map(w => `<span>${md(w.m)}</span>`).join('');
 
+  renderAccumulated(totals, order, colorOf);
+
   // All-time hours per project (ranked, one hue); expand a project for its per-task split.
   const hbar = (label, tipLabel, h, max, color, extra) => `<div class="hbar ${extra || ''}" data-tip="${esc(tipLabel)}  ${h}h">
       <span>${label}</span><span class="hbar-val">${h}h</span>
@@ -1730,6 +1765,66 @@ function renderDashboard(){
     done.map(x => `<div class="streak-row"><span>${escapeHtml(x.title)}</span><span class="sub">${escapeHtml(projTitle(x.projectId))}</span></div>`).join('') +
     `</div>` : `<div class="empty">${t('doneEmpty')}</div>`;
 }
+
+// Accumulated hours since the first log: one area (total) or one line per top project.
+// One y-axis (hours); a crosshair + tooltip reads every series on the hovered day.
+let accMode = 'total';
+function renderAccumulated(totals, order, colorOf){
+  const el = document.getElementById('accChart');
+  document.getElementById('accToggle').innerHTML = ['total','project'].map(m =>
+    `<button class="chip btn-sm ${accMode===m?'on':''}" aria-pressed="${accMode===m}" onclick="accMode='${m}'; renderDashboard()">${t(m==='total'?'accTotal':'accByProject')}</button>`).join('');
+  const dates = Object.keys(dailyLog.entries).filter(d => Object.values(dailyLog.entries[d].hours || {}).some(h => h > 0)).sort();
+  if(!dates.length){ el.innerHTML = `<div class="empty">${t('weeklyEmpty')}</div>`; document.getElementById('accLegend').innerHTML = ''; return; }
+  const days = []; for(let d = new Date(dates[0] + 'T00:00:00'); fmtDate(d.getTime()) <= todayStr(0); d.setDate(d.getDate() + 1)) days.push(fmtDate(d.getTime()));
+  const keys = accMode === 'total' ? ['total'] : order;
+  const keyOf = pid => accMode === 'total' ? 'total' : (order.includes(pid) ? pid : 'other');
+  const run = Object.fromEntries(keys.map(k => [k, 0]));
+  const series = Object.fromEntries(keys.map(k => [k, []]));
+  days.forEach(d => {
+    const e = dailyLog.entries[d];
+    if(e) Object.entries(e.hours || {}).forEach(([pid, h]) => { const k = keyOf(pid); if(k in run) run[k] += h || 0; });
+    keys.forEach(k => series[k].push(run[k]));
+  });
+  const name = k => k === 'total' ? t('accTotal') : k === 'other' ? t('otherProjects') : ((state.tasks.find(p => p.id === k) || {}).title || '');
+  const color = k => k === 'total' ? 'var(--active)' : colorOf(k);
+  document.getElementById('accLegend').innerHTML = accMode === 'total' ? '' : keys.map(k => `<span><i style="background:${color(k)}"></i>${escapeHtml(name(k))}</span>`).join('');
+
+  const W = el.clientWidth || 600, H = 220, L = 34, R = 10, T = 10, B = 22;
+  const maxY = Math.max(1, ...keys.map(k => series[k][series[k].length - 1]));
+  const step = [1,2,5,10,20,25,50,100,200,500].find(s => maxY / s <= 4) || 1000;
+  const top = Math.ceil(maxY / step) * step;
+  const x = i => L + (days.length === 1 ? 0 : i / (days.length - 1) * (W - L - R));
+  const y = v => T + (1 - v / top) * (H - T - B);
+  const ticks = []; for(let v = 0; v <= top; v += step) ticks.push(v);
+  const path = k => series[k].map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  const xIdx = [0, Math.floor((days.length - 1) / 2), days.length - 1].filter((v, i, a) => a.indexOf(v) === i);
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${t('accTitle')}: ${keys.map(k => `${name(k)} ${series[k][series[k].length-1]}h`).join(', ')}">
+    ${ticks.map(v => `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e3db"/><text x="${L-6}" y="${y(v)+3}" text-anchor="end">${v}h</text>`).join('')}
+    ${xIdx.map(i => `<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?'start':i===days.length-1?'end':'middle'}">${days[i].slice(5).replace('-','/')}</text>`).join('')}
+    ${accMode === 'total' ? `<path d="${path('total')}L${x(days.length-1)},${y(0)}L${x(0)},${y(0)}Z" fill="var(--active)" opacity="0.14"/>` : ''}
+    ${keys.map(k => `<path d="${path(k)}" fill="none" stroke="${color(k)}" stroke-width="2" stroke-linejoin="round"/>`).join('')}
+    <line id="accCross" y1="${T}" y2="${H-B}" stroke="#8a8578" stroke-dasharray="3 3" style="display:none"/>
+    ${keys.map(k => `<circle class="acc-dot" data-k="${k}" r="4" fill="${color(k)}" stroke="#fff" stroke-width="2" style="display:none"/>`).join('')}
+    <rect x="${L}" y="0" width="${W-L-R}" height="${H}" fill="transparent" id="accHit"/>
+  </svg>`;
+  const hit = el.querySelector('#accHit'), cross = el.querySelector('#accCross'), tip = document.getElementById('vizTip');
+  const hide = () => { cross.style.display = 'none'; el.querySelectorAll('.acc-dot').forEach(c => c.style.display = 'none'); tip.style.display = 'none'; };
+  hit.addEventListener('mousemove', ev => {
+    const r = el.querySelector('svg').getBoundingClientRect();
+    const px = (ev.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(days.length - 1, Math.round((px - L) / (W - L - R) * (days.length - 1))));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.style.display = '';
+    el.querySelectorAll('.acc-dot').forEach(c => { c.setAttribute('cx', x(i)); c.setAttribute('cy', y(series[c.dataset.k][i])); c.style.display = ''; });
+    tip.textContent = `${t('accUntil')} ${days[i]}` + keys.map(k => `\n${name(k)}  ${Math.round(series[k][i] * 10) / 10}h`).join('');
+    tip.style.display = 'block';
+    tip.style.left = Math.max(8, Math.min(ev.clientX + 12, innerWidth - tip.offsetWidth - 8)) + 'px';
+    tip.style.top = Math.max(8, ev.clientY - tip.offsetHeight - 10) + 'px';
+    ev.stopPropagation();
+  });
+  hit.addEventListener('mouseleave', hide);
+}
+let accResizeTimer;
+addEventListener('resize', () => { clearTimeout(accResizeTimer); accResizeTimer = setTimeout(() => { if(document.getElementById('view-dash').classList.contains('on')) renderDashboard(); }, 150); });
 
 // Job funnel lives on the pipeline page (it's only about job hunting).
 function renderFunnel(){
