@@ -146,6 +146,31 @@ function stagesOf(r){
   s.awake = Math.max(0, (num(r['Time in Bed (min)']) || asleep) - asleep);
   return { s, asleep, bed: asleep + s.awake };
 }
+// Oura sleep_phase_5_min: one digit per 5 minutes from bedtime start — 1 deep, 2 light, 3 REM, 4 awake
+// (checked against the sheet's per-stage minutes for the night of 2026-07-28: each stage within ~10 min).
+const PHASE = { 1: 'deep', 2: 'light', 3: 'rem', 4: 'awake' };
+const LANES = ['awake', 'rem', 'light', 'deep']; // top to bottom, as Apple Health draws them
+// Clock time as recorded (its own UTC offset), in minutes from the previous noon so one night is one continuous span.
+function clockMin(iso){ const m = /T(\d\d):(\d\d)/.exec(iso || ''); if(!m) return null; const v = +m[1] * 60 + +m[2]; return v < 720 ? v + 1440 : v; }
+const hhmm = v => { v = Math.round(v) % 1440; return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0'); };
+function timingOf(r){
+  const start = clockMin(r['Bedtime Start']), ph = (r['Sleep Phases 5min'] || '').trim();
+  if(start === null || !/^[1-4]+$/.test(ph)) return null;
+  const runs = [];
+  for(let i = 0; i < ph.length; i++){ const k = PHASE[ph[i]], l = runs[runs.length - 1]; if(l && l.k === k) l.n++; else runs.push({ k, i, n: 1 }); }
+  const wake = clockMin(r['Bedtime End']);
+  return { start, len: ph.length * 5, wake: wake !== null && wake > start ? wake : start + ph.length * 5, runs };
+}
+// Last night as a timeline: one lane per stage, a block for every stretch spent in it.
+function hypnogramHtml(tm){
+  const pct = m => (m / tm.len * 100).toFixed(2) + '%';
+  const lanes = LANES.map(k => `<div class="hy-lane"><span class="hy-name">${t('stage_' + k)}</span><div class="hy-track">${tm.runs.filter(x => x.k === k).map(x =>
+    `<span class="hy-run" style="left:${pct(x.i * 5)}; width:${pct(x.n * 5)}; background:var(--sleep-${k})" data-tip="${hhmm(tm.start + x.i * 5)}–${hhmm(tm.start + (x.i + x.n) * 5)} · ${t('stage_' + k)} ${fmtMin(x.n * 5)}"></span>`).join('')}</div></div>`).join('');
+  const step = tm.len > 600 ? 120 : 60, ticks = [];
+  for(let m = Math.ceil((tm.start + 45) / 60) * 60; m < tm.start + tm.len - 45; m += step) ticks.push(m); // keep hour ticks clear of the start/end labels
+  return `<div class="hy">${lanes}<div class="hy-axis"><span class="hy-name"></span><div class="hy-track">
+    <span style="left:0">${hhmm(tm.start)}</span>${ticks.map(m => `<span style="left:${pct(m - tm.start)}; transform:translateX(-50%)">${hhmm(m)}</span>`).join('')}<span style="right:0">${hhmm(tm.wake)}</span></div></div></div>`;
+}
 function renderOuraSleep(){
   const el = document.getElementById('ouraSleepCard');
   const nights = ouraRows.filter(r => num(r['Total Sleep (min)']) && num(r['Deep Sleep (min)']) !== null);
@@ -153,6 +178,8 @@ function renderOuraSleep(){
   const last = nights[nights.length - 1], { s, asleep, bed } = stagesOf(last);
   const prev = nights.slice(-15, -1).map(r => stagesOf(r).asleep);
   const diff = prev.length >= 3 ? Math.round(asleep - average(prev)) : null;
+  const lastTm = timingOf(last);
+  const wakeUps = lastTm ? lastTm.runs.filter((x, i) => x.k === 'awake' && i > 0 && i < lastTm.runs.length - 1).length : null; // awake stretches between falling asleep and getting up
   const diffTxt = diff === null ? '' : Math.abs(diff) < 10 ? t('sleepSameAsUsual') : t(diff > 0 ? 'sleepMoreThanUsual' : 'sleepLessThanUsual').replace('{m}', fmtMin(Math.abs(diff)));
 
   // donut: one circle per stage, offset along the ring, with a 2px surface gap between segments
@@ -167,21 +194,28 @@ function renderOuraSleep(){
   const legend = STAGES.map(([k]) => `<div class="ring-row"><i style="background:var(--sleep-${k})"></i>
       <span>${t('stage_' + k)}<span class="sub">${t('stage_' + k + 'Desc')}</span></span><b>${fmtMin(s[k])}</b><span class="sub">${Math.round(s[k] / bed * 100)}%</span></div>`).join('');
 
-  // last 7 nights, stacked vertical bars in hours (time in bed), same stage order bottom = deep
-  const week = nights.slice(-healthRange).map(r => ({ r, ...stagesOf(r) })), dense = week.length > 10;
+  // last N nights as Apple-style floating bars on a clock axis: bedtime at the top, wake-up at the bottom, coloured by stage
+  const week = nights.slice(-healthRange).map(r => ({ r, ...stagesOf(r), tm: timingOf(r) })), dense = week.length > 10;
   const every = Math.ceil(week.length / 8); // date labels: at most ~8 under the bars
-  const maxH = Math.max(9, Math.ceil(Math.max(...week.map(x => x.asleep)) / 60)); // bars = time asleep (awake only in the tooltip), so height matches the label
-  const H = 140, toPx = m => m / 60 / maxH * H;
-  const avgWeek = average(week.map(x => x.asleep));
+  const timed = week.filter(x => x.tm), avgWeek = average(week.map(x => x.asleep));
+  const lo = timed.length ? Math.floor(Math.min(...timed.map(x => x.tm.start)) / 60) * 60 : 0;
+  const hi = timed.length ? Math.ceil(Math.max(...timed.map(x => x.tm.start + x.tm.len)) / 60) * 60 : 1;
+  const H = 180, px = m => (m / (hi - lo) * H).toFixed(1);
   const bars = week.map(x => {
-    const tip = `${mdStr(x.r['Date'])} · ${t('asleepLabel')} ${fmtMin(x.asleep)}` + STAGES.map(([k]) => `\n${t('stage_' + k)}  ${fmtMin(x.s[k])}`).join('');
-    const stack = STAGES.filter(([k]) => k !== 'awake').map(([k]) => x.s[k] ? `<span style="height:${toPx(x.s[k]).toFixed(1)}px; background:var(--sleep-${k})"></span>` : '').join('');
-    return `<div class="sl-col" tabindex="0" data-tip="${escapeHtml(tip)}">${dense ? '' : `<div class="sl-val">${fmtMin(x.asleep)}</div>`}<div class="sl-stack">${stack}</div></div>`;
+    const tip = `${mdStr(x.r['Date'])} · ${t('asleepLabel')} ${fmtMin(x.asleep)}` + (x.tm ? `\n${hhmm(x.tm.start)} → ${hhmm(x.tm.wake)}` : '') + STAGES.map(([k]) => `\n${t('stage_' + k)}  ${fmtMin(x.s[k])}`).join('');
+    const bar = x.tm ? `<div class="fl-bar" style="top:${px(x.tm.start - lo)}px">${x.tm.runs.map(r => `<span style="height:${px(r.n * 5)}px; background:var(--sleep-${r.k})"></span>`).join('')}</div>
+      ${dense ? '' : `<div class="sl-val fl-val" style="top:${(px(x.tm.start - lo) - 15)}px">${fmtMin(x.asleep)}</div>`}` : '';
+    return `<div class="fl-col" tabindex="0" data-tip="${escapeHtml(tip)}">${bar}</div>`;
   }).join('');
-  const grid = [4, 8].map(h => `<div class="sl-grid" style="bottom:${(h / maxH * H).toFixed(1)}px"><span>${h}h</span></div>`).join('');
+  const grid = []; for(let m = lo; m <= hi; m += (hi - lo) > 720 ? 180 : 120) grid.push(`<div class="fl-grid" style="top:${px(m - lo)}px"><span>${hhmm(m)}</span></div>`);
+  // schedule regularity: average bed / wake time and how much bedtime moves around
+  const sched = timed.length >= 3 ? (() => {
+    const st = timed.map(x => x.tm.start), sd = Math.round(stddev(st));
+    return `<div class="trend-line">${t('scheduleLine').replace('{b}', hhmm(average(st))).replace('{w}', hhmm(average(timed.map(x => x.tm.wake)))).replace('{sd}', fmtMin(sd))}${sd > 60 ? ` · <span class="vital-warn">${t('scheduleIrregular')}</span>` : ''}</div>`;
+  })() : '';
 
   el.innerHTML = `
-    <div class="health-verdict">${t('sleepHeadline').replace('{d}', mdStr(last['Date'])).replace('{t}', fmtMin(asleep))}${diffTxt ? `<span class="sub"> · ${diffTxt}</span>` : ''}</div>
+    <div class="health-verdict">${t('sleepHeadline').replace('{d}', mdStr(last['Date'])).replace('{t}', fmtMin(asleep))}${diffTxt ? `<span class="sub"> · ${diffTxt}</span>` : ''}${wakeUps !== null ? `<span class="sub"> · ${t('wakeUps').replace('{n}', wakeUps)}</span>` : ''}</div>
     <div class="ring-wrap">
       <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${STAGES.map(([k]) => `${t('stage_' + k)} ${fmtMin(s[k])}`).join(', ')}">
         ${segs}
@@ -192,9 +226,11 @@ function renderOuraSleep(){
         <div class="sub" style="margin-top:6px;">${t('efficiencyLabel')} ${num(last['Sleep Efficiency']) ?? '–'}% · ${t('latencyLabel')} ${fmtMin(num(last['Sleep Latency (min)']))}</div>
       </div>
     </div>
+    ${lastTm ? `<div class="health-sub-title">${t('nightTimeline')}<span class="sub"> · ${hhmm(lastTm.start)} → ${hhmm(lastTm.wake)}</span></div>${hypnogramHtml(lastTm)}` : ''}
     <div class="health-sub-title">${t('lastNNights').replace('{n}', week.length)}<span class="sub"> · ${t('avgAsleep')} ${fmtMin(avgWeek)}</span></div>
     ${trendLine(nights.map(r => stagesOf(r).asleep), fmtMin)}
-    <div class="sl-chart" style="height:${H + 18}px">${grid}<div class="sl-cols${dense ? ' dense' : ''}">${bars}</div></div>
+    ${sched}
+    ${timed.length ? `<div class="fl-chart" style="height:${H}px">${grid.join('')}<div class="fl-cols${dense ? ' dense' : ''}">${bars}</div></div>` : `<div class="sub">${t('noTiming')}</div>`}
     <div class="sl-labels${dense ? ' dense' : ''}">${week.map((x, i) => `<span>${(week.length - 1 - i) % every ? '' : mdStr(x.r['Date'])}</span>`).join('')}</div>`;
 }
 
