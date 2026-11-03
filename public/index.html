@@ -180,6 +180,8 @@
   .progress-card{background:#fff; border-radius:14px; padding:14px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.05);}
   .progress-track{background:#efefec; border-radius:10px; height:14px; overflow:hidden; margin:8px 0;}
   .progress-fill{background:var(--accent); height:100%; border-radius:10px;}
+  .attn-head{font-weight:700; font-size:13.5px; color:var(--accent); margin:2px 0 8px;}
+  .attn-row{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:3px 0;}
   .stale-item{
     background:#fff; border-radius:12px; padding:10px 14px; margin-bottom:8px;
     border-left:4px solid var(--watch); font-size:13px;
@@ -365,7 +367,6 @@
       <div class="dash-side">
         <section class="panel">
           <div class="dash-section-title" id="dashProgressTitle">🧭 项目推进</div>
-          <div class="seg-legend" id="segLegend"></div>
           <div id="projectProgress"></div>
         </section>
         <section class="panel">
@@ -468,7 +469,10 @@ const I18N = {
     projTotalTitle: '⏱️ 项目累计投入', unassignedTask: '未指定任务', topTasksTitle: '🔥 最费时的任务', topTasksEmpty: '还没有记到任务上的时间',
     kpiHours: '本周投入', kpiDoing: '进行中任务', kpiWaiting: '等待 / 受阻', kpiDone: '本周完成', segTodo: '待办',
     progressTitle: '🧭 项目推进', progressEmpty: '没有进行中的项目', noTasksYet: '还没有任务',
-    staleBadge: '⏸️ 14 天以上没动静', doneTitle: '✅ 本周完成', doneEmpty: '这周还没有完成的任务',
+    needAttn: '⚠️ 需要处理', onTrack: '✅ 正常推进', allOnTrack: '所有项目都在推进 👍',
+    issueStale: n => `${n} 天没动静`, issueNever: '还没有任何记录', issueWaiting: (x, n) => `「${x}」等待了 ${n} 天`, issueNoDoing: '没有进行中的任务',
+    actAddTask: '加任务', actHold: '改为搁置', actOpenTasks: '去任务',
+    doneTitle: '✅ 本周完成', doneEmpty: '这周还没有完成的任务',
     modalTitle: '每周确认', modalContinue: '继续推进', modalHold: '先搁置', modalDone: '已完成 / 归档', modalSkip: '跳过这条',
     modalNotePlaceholder: '这周的进展 / 备注（可选，会追加到这条线程）',
     lcExploring: '探索中', lcActive: '推进中', lcOnHold: '搁置', lcMaintaining: '维护中', lcArchived: '已归档',
@@ -531,7 +535,10 @@ const I18N = {
     projTotalTitle: '⏱️ Total hours by project', unassignedTask: 'No task', topTasksTitle: '🔥 Most time-consuming tasks', topTasksEmpty: 'No time logged on tasks yet',
     kpiHours: 'Hours this week', kpiDoing: 'Tasks in progress', kpiWaiting: 'Waiting / blocked', kpiDone: 'Done this week', segTodo: 'To do',
     progressTitle: '🧭 Project Progress', progressEmpty: 'No projects in progress', noTasksYet: 'No tasks yet',
-    staleBadge: '⏸️ No activity for 14+ days', doneTitle: '✅ Done This Week', doneEmpty: 'Nothing finished this week yet',
+    needAttn: '⚠️ Needs attention', onTrack: '✅ On track', allOnTrack: 'Every project is moving 👍',
+    issueStale: n => `No activity for ${n} days`, issueNever: 'Nothing logged yet', issueWaiting: (x, n) => `"${x}" waiting for ${n} days`, issueNoDoing: 'No task in progress',
+    actAddTask: 'Add task', actHold: 'Put on hold', actOpenTasks: 'Open tasks',
+    doneTitle: '✅ Done This Week', doneEmpty: 'Nothing finished this week yet',
     modalTitle: 'Weekly Check-in', modalContinue: 'Keep Going', modalHold: 'Put on Hold', modalDone: 'Done / Archive', modalSkip: 'Skip',
     modalNotePlaceholder: 'This week’s progress / notes (optional, appended to this thread)',
     lcExploring: 'Exploring', lcActive: 'Active', lcOnHold: 'On Hold', lcMaintaining: 'Maintaining', lcArchived: 'Archived',
@@ -1270,7 +1277,7 @@ async function setLifecycle(id, lc){
   p.column = LIFECYCLE[lc];
   if(lc === 'exploring' || lc === 'maintaining') p.phase = lc; else delete p.phase;
   p.updatedAt = Date.now();
-  await saveState(); render(); renderDaily(); showToast(t('toastUpdated'));
+  await saveState(); render(); renderDaily(); renderDashboard(); showToast(t('toastUpdated'));
 }
 
 const TASK_STATUS = ['inbox','backlog','ready','doing','waiting','done'];
@@ -1317,6 +1324,10 @@ function taskLogHtml(it){
   const btns = p && canLogProject(p) ? `<button class="chip btn-sm" onclick="logHours('${p.id}','${it.id}',0.5,todayStr(0))">+0.5h</button>
       <button class="chip btn-sm" onclick="logHours('${p.id}','${it.id}',1,todayStr(0))">+1h</button>` : '';
   return `<div class="card-actions" style="margin-bottom:6px;">${btns}<span class="sub" style="font-size:11.5px;">${t('todayShort')} ${today}h · ${t('totalShort')} ${total}h</span></div>`;
+}
+function goTasks(projectId){
+  taskFilter = projectId; switchTab('tasks'); renderTasks();
+  document.getElementById('taskAddTitle').focus();
 }
 function renderTasks(){
   const live = state.tasks.filter(p => p.column !== 'archived');
@@ -1772,19 +1783,29 @@ function renderDashboard(){
     kpi(t('kpiDone'), doneWeek.length);
 
   // Task status split per project: todo (inbox/backlog/ready) → doing → waiting → done.
-  const SEG = [['todo', t('segTodo'), ['inbox','backlog','ready']], ['doing', t('tsDoing'), ['doing']], ['waiting', t('tsWaiting'), ['waiting']], ['done', t('tsDone'), ['done']]];
-  document.getElementById('segLegend').innerHTML = SEG.map(([k, label]) => `<span><i style="background:var(--seg-${k})"></i>${label}</span>`).join('');
-
-  // Project progress: exploring / active / maintaining projects with their open tasks.
+  // Project progress, split into "needs attention" (with a direct action) and a collapsed "on track" list.
   // Stale = neither a logged hour nor a task change in 14 days (editing the project itself doesn't count).
-  const cutoff14 = Date.now() - 14 * 86400000;
+  const DAY = 86400000, daysAgo = ts => Math.floor((Date.now() - ts) / DAY);
   const live = state.tasks.filter(p => ['exploring','active','maintaining'].includes(lifecycleOf(p)));
   const taskLine = (st, list) => list.length ? `<div class="sub" style="margin-top:4px;">${t(TS_LABEL[st])}：${list.map(x => escapeHtml(x.title)).join('、')}</div>` : '';
-  document.getElementById('projectProgress').innerHTML = live.length ? live.map(p => {
+  const btn = (fn, label) => `<button class="chip btn-sm" onclick="${fn}">${label}</button>`;
+  const rows = live.map(p => {
     const items = state.items.filter(x => x.projectId === p.id);
     const open = items.filter(x => x.status !== 'done');
     const lastLog = lastActiveDate(p.id);
     const lastTouch = Math.max(lastLog ? new Date(lastLog + 'T00:00:00').getTime() : 0, ...items.map(x => x.updatedAt || 0));
+    const issues = [];
+    if(daysAgo(lastTouch) >= 14) issues.push({ w: daysAgo(lastTouch), text: lastTouch ? t('issueStale')(daysAgo(lastTouch)) : t('issueNever'),
+      acts: btn(`goTasks('${p.id}')`, t('actAddTask')) + btn(`setLifecycle('${p.id}','on_hold')`, t('actHold')) });
+    // a task's updatedAt is set on every status change, so for a waiting task it's when it started waiting
+    open.filter(x => x.status === 'waiting' && daysAgo(x.updatedAt || 0) >= 7).forEach(x =>
+      issues.push({ w: daysAgo(x.updatedAt), text: t('issueWaiting')(escapeHtml(x.title), daysAgo(x.updatedAt)), acts: btn(`goTasks('${p.id}')`, t('actOpenTasks')) }));
+    if(lifecycleOf(p) !== 'maintaining' && open.length && !open.some(x => x.status === 'doing'))
+      issues.push({ w: 0, text: t('issueNoDoing'), acts: btn(`goTasks('${p.id}')`, t('actOpenTasks')) });
+    return { p, items, open, issues, w: Math.max(-1, ...issues.map(x => x.w)) };
+  });
+  const SEG = [['todo', t('segTodo'), ['inbox','backlog','ready']], ['doing', t('tsDoing'), ['doing']], ['waiting', t('tsWaiting'), ['waiting']], ['done', t('tsDone'), ['done']]];
+  const progressCard = ({ p, items, open }) => {
     const segs = SEG.map(([k, label, sts]) => [k, label, items.filter(x => sts.includes(x.status)).length]).filter(x => x[2] > 0);
     const summary = segs.map(([, label, n]) => `${label} ${n}`).join(' · ');
     return `<div class="card ${p.column}" style="padding:10px 14px;">
@@ -1792,9 +1813,17 @@ function renderDashboard(){
       ${items.length ? `<div class="seg-bar" role="img" aria-label="${escapeHtml(summary)}">${segs.map(([k, label, n]) => `<span style="flex:${n}; background:var(--seg-${k})" title="${label}：${n}"></span>`).join('')}</div>` : ''}
       ${taskLine('doing', open.filter(x => x.status === 'doing'))}
       ${taskLine('waiting', open.filter(x => x.status === 'waiting'))}
-      ${lastTouch < cutoff14 ? `<div class="stale-item" style="margin-top:4px;">${t('staleBadge')}</div>` : ''}
     </div>`;
-  }).join('') : `<div class="empty">${t('progressEmpty')}</div>`;
+  };
+  const bad = rows.filter(r => r.issues.length).sort((a,b) => b.w - a.w), ok = rows.filter(r => !r.issues.length);
+  document.getElementById('projectProgress').innerHTML = !live.length ? `<div class="empty">${t('progressEmpty')}</div>` :
+    (bad.length ? `<div class="attn-head">${t('needAttn')} (${bad.length})</div>` + bad.map(r => `<div class="stale-item">
+        <div style="font-weight:600; margin-bottom:4px;">${escapeHtml(r.p.title)} <span class="sub" style="font-weight:400;">· ${t(LC_LABEL[lifecycleOf(r.p)])}</span></div>
+        ${r.issues.map(x => `<div class="attn-row"><span>${x.text}</span><span class="card-actions">${x.acts}</span></div>`).join('')}
+      </div>`).join('') : `<div class="empty">${t('allOnTrack')}</div>`) +
+    (ok.length ? `<details class="card-tasks" style="margin-top:10px;"><summary>${t('onTrack')} (${ok.length})</summary>
+      <div class="seg-legend" style="margin:8px 0;">${SEG.map(([k, label]) => `<span><i style="background:var(--seg-${k})"></i>${label}</span>`).join('')}</div>
+      ${ok.map(progressCard).join('')}</details>` : '');
 
   // Done this week. shortcut: uses the task's updatedAt (set on every status change) as the finish time; add a doneAt field if tasks become editable after Done.
   const done = doneWeek.sort((a,b) => b.updatedAt - a.updatedAt);
