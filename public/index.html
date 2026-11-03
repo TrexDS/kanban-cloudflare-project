@@ -49,7 +49,7 @@
     main{padding:18px 24px;}
     .tabs{justify-content:flex-start;}
     .tab{flex:0 0 auto; padding:10px 18px; font-size:13.5px;}
-    .board{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:20px; align-items:start;}
+    .board{display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:14px; align-items:start;}
     .board .col{background:#efede7; border-radius:16px; padding:12px; margin-bottom:0;}
     .add-form{max-width:560px;}
     #view-pipeline, #view-daily, #view-health, #view-dash{max-width:900px;}
@@ -63,6 +63,7 @@
   .dot.archived{background:var(--archived);}
   .col-title{font-weight:700; font-size:14.5px;}
   .col-count{color:var(--sub); font-size:12.5px;}
+  .col-desc{color:var(--sub); font-size:12px; margin:-4px 0 8px;}
   .card{
     background:var(--card); border-radius:14px; padding:12px 14px; margin-bottom:10px;
     box-shadow:0 1px 2px rgba(0,0,0,0.05); border-left:4px solid transparent;
@@ -200,20 +201,7 @@
         <button class="btn-ghost" id="btnAddCancel" onclick="toggleAddForm()">取消</button>
       </div>
     </div>
-    <div class="board">
-    <div class="col">
-      <div class="col-head"><span class="dot active"></span><span class="col-title" id="colTitleActive">推进中</span><span class="col-count" id="count-active"></span></div>
-      <div id="list-active"></div>
-    </div>
-    <div class="col">
-      <div class="col-head"><span class="dot watch"></span><span class="col-title" id="colTitleWatch">搁置 / 观望</span><span class="col-count" id="count-watch"></span></div>
-      <div id="list-watch"></div>
-    </div>
-    <div class="col">
-      <div class="col-head"><span class="dot archived"></span><span class="col-title" id="colTitleArchived">已归档</span><span class="col-count" id="count-archived"></span></div>
-      <div id="list-archived"></div>
-    </div>
-    </div>
+    <div class="board" id="board"></div>
   </div>
 
   <!-- PIPELINE VIEW -->
@@ -342,7 +330,6 @@ const I18N = {
     formTitleAdd: '新增线程', formTitleEdit: '编辑线程',
     placeholderThreadName: '线程名称，例如：面签复审', placeholderNotesOptional: '备注（可选）',
     btnSave: '保存', btnCancel: '取消',
-    colActive: '推进中', colWatch: '搁置 / 观望', colArchived: '已归档',
     chipEdit: '编辑', chipDelete: '删除',
     emptyNone: '— 暂无 —',
     metaUpdatedPrefix: '更新于 ',
@@ -388,6 +375,7 @@ const I18N = {
     modalTitle: '每周确认', modalContinue: '继续推进', modalHold: '先搁置', modalDone: '已完成 / 归档', modalSkip: '跳过这条',
     modalNotePlaceholder: '这周的进展 / 备注（可选，会追加到这条线程）',
     lcExploring: '探索中', lcActive: '推进中', lcOnHold: '搁置', lcMaintaining: '维护中', lcArchived: '已归档',
+    lcExploringDesc: '还在试水，没决定要不要投入', lcActiveDesc: '当前主力投入', lcMaintainingDesc: '已成型，定期少量投入', lcOnHoldDesc: '暂停，以后可能恢复', lcArchivedDesc: '已结束',
     tsInbox: '收件箱', tsBacklog: '待排', tsReady: '可开始', tsDoing: '进行中', tsWaiting: '等待 / 受阻', tsDone: '完成',
     tasksSummary: '任务', placeholderNewTask: '新任务…', btnAdd: '添加'
   },
@@ -400,7 +388,6 @@ const I18N = {
     formTitleAdd: 'Add Thread', formTitleEdit: 'Edit Thread',
     placeholderThreadName: 'Thread name, e.g. Visa interview follow-up', placeholderNotesOptional: 'Notes (optional)',
     btnSave: 'Save', btnCancel: 'Cancel',
-    colActive: 'Active', colWatch: 'On Hold', colArchived: 'Archived',
     chipEdit: 'Edit', chipDelete: 'Delete',
     emptyNone: '— None —',
     metaUpdatedPrefix: 'Updated ',
@@ -446,6 +433,7 @@ const I18N = {
     modalTitle: 'Weekly Check-in', modalContinue: 'Keep Going', modalHold: 'Put on Hold', modalDone: 'Done / Archive', modalSkip: 'Skip',
     modalNotePlaceholder: 'This week’s progress / notes (optional, appended to this thread)',
     lcExploring: 'Exploring', lcActive: 'Active', lcOnHold: 'On Hold', lcMaintaining: 'Maintaining', lcArchived: 'Archived',
+    lcExploringDesc: 'Trying it out, not committed yet', lcActiveDesc: 'Main focus right now', lcMaintainingDesc: 'Established, light regular upkeep', lcOnHoldDesc: 'Paused, may resume later', lcArchivedDesc: 'Finished',
     tsInbox: 'Inbox', tsBacklog: 'Backlog', tsReady: 'Ready', tsDoing: 'In Progress', tsWaiting: 'Waiting / Blocked', tsDone: 'Done',
     tasksSummary: 'Tasks', placeholderNewTask: 'New task…', btnAdd: 'Add'
   }
@@ -465,7 +453,6 @@ function applyI18n(){
   setText('addFormTitle', editingTaskId ? 'formTitleEdit' : 'formTitleAdd');
   setPlaceholder('newTitle', 'placeholderThreadName'); setPlaceholder('newNotes', 'placeholderNotesOptional');
   setText('btnAddSave', 'btnSave'); setText('btnAddCancel', 'btnCancel');
-  setText('colTitleActive', 'colActive'); setText('colTitleWatch', 'colWatch'); setText('colTitleArchived', 'colArchived');
   setText('pipelineIntro', 'pipelineIntro');
   setText('pipelineCompaniesTitle', 'pipelineCompaniesTitle'); setText('btnAddCompany', 'btnAddCompany');
   setPlaceholder('coName', 'placeholderCompanyName'); setPlaceholder('coNotes', 'placeholderCompanyNotes');
@@ -1152,21 +1139,22 @@ function switchTab(name){
 }
 
 function render(){
-  const cols = { active: [], watch: [], archived: [] };
-  state.tasks.forEach(task => cols[task.column].push(task));
-  ['active','watch','archived'].forEach(col => {
-    const listEl = document.getElementById('list-'+col);
-    const countEl = document.getElementById('count-'+col);
-    countEl.textContent = cols[col].length ? `(${cols[col].length})` : '';
-    listEl.innerHTML = cols[col].length ? cols[col].map(task => cardHtml(task)).join('') : `<div class="empty">${t('emptyNone')}</div>`;
-  });
+  // One board column per lifecycle state (LIFECYCLE key order = column order).
+  document.getElementById('board').innerHTML = Object.keys(LIFECYCLE).map(lc => {
+    const list = state.tasks.filter(p => lifecycleOf(p) === lc);
+    return `<div class="col">
+      <div class="col-head"><span class="dot ${LIFECYCLE[lc]}"></span><span class="col-title">${t(LC_LABEL[lc])}</span><span class="col-count">${list.length ? `(${list.length})` : ''}</span></div>
+      <p class="col-desc">${t(LC_LABEL[lc] + 'Desc')}</p>
+      ${list.length ? list.map(cardHtml).join('') : `<div class="empty">${t('emptyNone')}</div>`}
+    </div>`;
+  }).join('');
   document.getElementById('lastCheckin').textContent = state.lastCheckin
     ? `${t('lastCheckinPrefix')}${fmtDate(state.lastCheckin)}` : t('neverCheckedIn');
 }
 
 // Project lifecycle: `column` stays the source of truth (other views and old builds read it);
 // `phase` only refines it, and is ignored once it no longer matches the column.
-const LIFECYCLE = { exploring:'active', active:'active', on_hold:'watch', maintaining:'watch', archived:'archived' };
+const LIFECYCLE = { exploring:'active', active:'active', maintaining:'watch', on_hold:'watch', archived:'archived' };
 const LC_LABEL = { exploring:'lcExploring', active:'lcActive', on_hold:'lcOnHold', maintaining:'lcMaintaining', archived:'lcArchived' };
 function lifecycleOf(p){
   if(p.phase && LIFECYCLE[p.phase] === p.column) return p.phase;
