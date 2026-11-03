@@ -41,6 +41,20 @@
   .view{display:none;}
   .view.on{display:block;}
   .col{margin-bottom:22px;}
+  /* Desktop: centered page, board columns side by side, other views at reading width. Phones keep the stacked layout. */
+  @media (min-width: 900px){
+    header{padding-left:max(24px, calc((100% - 1232px) / 2)); padding-right:max(24px, calc((100% - 1232px) / 2));}
+    main{max-width:1280px; margin:0 auto;}
+    main{padding:18px 24px;}
+    .tabs{justify-content:flex-start;}
+    .tab{flex:0 0 auto; padding:10px 18px; font-size:13.5px;}
+    .board{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:20px; align-items:start;}
+    .board .col{background:#efede7; border-radius:16px; padding:12px; margin-bottom:0;}
+    .add-form{max-width:560px;}
+    #view-pipeline, #view-daily, #view-health, #view-dash{max-width:900px;}
+    #list-companies, #list-contacts{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px;}
+    #list-companies .card, #list-contacts .card{margin-bottom:0;}
+  }
   .col-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
   .dot{width:9px;height:9px;border-radius:50%;}
   .dot.active{background:var(--active);}
@@ -185,6 +199,7 @@
         <button class="btn-ghost" id="btnAddCancel" onclick="toggleAddForm()">取消</button>
       </div>
     </div>
+    <div class="board">
     <div class="col">
       <div class="col-head"><span class="dot active"></span><span class="col-title" id="colTitleActive">推进中</span><span class="col-count" id="count-active"></span></div>
       <div id="list-active"></div>
@@ -196,6 +211,7 @@
     <div class="col">
       <div class="col-head"><span class="dot archived"></span><span class="col-title" id="colTitleArchived">已归档</span><span class="col-count" id="count-archived"></span></div>
       <div id="list-archived"></div>
+    </div>
     </div>
   </div>
 
