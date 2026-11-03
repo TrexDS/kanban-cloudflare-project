@@ -87,8 +87,9 @@
   .acc-chart{position:relative; height:220px;}
   .acc-chart svg{display:block; width:100%; height:100%; overflow:visible;}
   .acc-chart text{font-size:10.5px; fill:var(--sub);}
-  /* Series slots (4 muted hues + grey "other"); a project keeps its slot by all-time hours rank. */
-  :root{ --s1:#35627a; --s2:#e5aea9; --s3:#a6a9d0; --s4:#c7984f; --s-other:#b7c0c6; }
+  /* Project series: deep jewel tones, deliberately unlike the health pastels so the two pages never read as one legend.
+     Order validated (dataviz validate_palette.js, light, adjacent pairs): all checks pass. A project keeps its slot by all-time hours rank. */
+  :root{ --s1:#3a5aa8; --s2:#9e3e62; --s3:#b4703a; --s4:#078f86; --s-other:#c3cbd0; }
   .wk-chart{display:flex; align-items:flex-end; gap:6px; height:190px; padding:18px 0 0; border-bottom:1px solid var(--line-strong);}
   .wk-col{flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:stretch; cursor:default;}
   .wk-col:hover, .wk-col:focus{background:rgba(0,0,0,0.04); outline:none;}
