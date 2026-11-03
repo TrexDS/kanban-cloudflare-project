@@ -79,6 +79,26 @@
   .seg-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--sub); margin:-2px 0 8px;}
   .seg-legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px;}
   .seg-counts{font-size:12px; color:var(--sub);}
+  /* Series slots (validated: 4 hues + gray "other"); a project keeps its slot by all-time hours rank. */
+  :root{ --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s-other:#6f6b62; }
+  .wk-chart{display:flex; align-items:flex-end; gap:6px; height:190px; padding:18px 0 0; border-bottom:1px solid #dcd8ce;}
+  .wk-col{flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:stretch; cursor:default;}
+  .wk-col:hover, .wk-col:focus{background:rgba(0,0,0,0.04); outline:none;}
+  .wk-stack{display:flex; flex-direction:column-reverse; gap:2px;}
+  .wk-stack span{display:block; min-height:2px;}
+  .wk-stack span:last-child{border-radius:4px 4px 0 0;}
+  .wk-total{font-size:11px; color:var(--sub); text-align:center; margin-bottom:3px;}
+  .wk-labels{display:flex; gap:6px; font-size:10.5px; color:var(--sub); margin-top:4px;}
+  .wk-labels span{flex:1; text-align:center;}
+  .hbar{display:grid; grid-template-columns:minmax(0,1fr) 46px; gap:4px 10px; align-items:center; font-size:13px; padding:3px 0;}
+  .hbar-track{grid-column:1 / -1; height:8px; background:#eceae4; border-radius:4px; overflow:hidden;}
+  .hbar-track > span{display:block; height:100%; border-radius:0 4px 4px 0;}
+  .hbar-val{text-align:right; font-variant-numeric:tabular-nums; color:var(--sub);}
+  details.proj-total{background:var(--card); border-radius:14px; padding:8px 14px; margin-bottom:8px; box-shadow:0 1px 2px rgba(0,0,0,0.05);}
+  details.proj-total summary{list-style:none; cursor:pointer;}
+  details.proj-total summary::-webkit-details-marker{display:none;}
+  details.proj-total .hbar.sub-bar{padding-left:14px; font-size:12.5px;}
+  .viz-tip{position:fixed; z-index:100; pointer-events:none; background:#2b2b2b; color:#fff; font-size:12px; line-height:1.5; padding:6px 9px; border-radius:8px; white-space:pre; display:none; max-width:320px;}
   .card{
     background:var(--card); border-radius:14px; padding:12px 14px; margin-bottom:10px;
     box-shadow:0 1px 2px rgba(0,0,0,0.05); border-left:4px solid transparent;
@@ -136,6 +156,8 @@
   }
   .log-row-title{font-weight:600; font-size:14.5px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;}
   .log-today-total{font-size:12.5px; color:var(--active); font-weight:700;}
+  .log-task{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 0; border-top:1px solid #f0ede6;}
+  .log-task-name{flex:1; min-width:140px; font-size:13.5px;}
   .log-btns{display:flex; gap:6px; flex-wrap:wrap;}
   textarea.daily-note{
     width:100%; min-height:60px; border:1px solid #e0dccf; border-radius:10px;
@@ -310,13 +332,20 @@
   <div class="view" id="view-dash">
     <div class="kpi-row" id="kpiRow"></div>
     <div id="budgetCards"></div>
-    <div class="dash-section-title" id="dashWeeklyTitle">📊 近7天时间分布</div>
-    <div id="weeklyBars"></div>
+    <div class="dash-section-title" id="dashWeeksTitle">📊 每周投入（近 12 周）</div>
+    <div class="seg-legend" id="weeksLegend"></div>
+    <div class="wk-chart" id="weeksChart"></div>
+    <div class="wk-labels" id="weeksLabels"></div>
     <div class="dash-section-title" id="dashProgressTitle">🧭 项目推进</div>
     <div class="seg-legend" id="segLegend"></div>
     <div id="projectProgress"></div>
     <div class="dash-section-title" id="dashDoneTitle">✅ 本周完成</div>
     <div id="doneList"></div>
+    <div class="dash-section-title" id="dashProjTotalTitle">⏱️ 项目累计投入</div>
+    <div id="projTotals"></div>
+    <div class="dash-section-title" id="dashTopTasksTitle">🔥 最费时的任务</div>
+    <div id="topTasks"></div>
+  <div class="viz-tip" id="vizTip" role="tooltip"></div>
   </div>
 </main>
 
@@ -374,9 +403,9 @@ const I18N = {
     placeholderContactName: '姓名 / 公司 / 职位', placeholderNotes: '备注',
     stageApplied: '已投递', stageScreen: '初筛/电话面', stageInterview: '面试中', stageFinal: '终面', stageOffer: 'Offer', stageRejected: '已拒 / 结束',
     stageContacted: '已发送消息', stageReplied: '已回复', stageMeeting: '已约见 / 通话', stageNoresponse: '无回应',
-    dailyIntro: '点一下记录今天在这条线程上花的时间，晚上顺手打个卡就行。',
+    dailyIntro: '把今天的时间记到具体任务上；没有对应任务的记到「其他」。项目时间 = 各任务时间之和。',
     dailyNoteTitle: '📝 今日备注', placeholderDailyNote: '今天大概做了什么（可选）',
-    dailyEmptyActive: '「推进中」栏目前没有线程',
+    dailyEmptyActive: '目前没有可打卡的项目（探索中 / 推进中 / 维护中）',
     tagArchived: '（已归档）', tagWatch: '（已搁置）',
     healthOverviewTitle: '💍 健康总览（Oura）', healthTrendTitle: '📈 关键趋势（HRV / 静息心率）',
     healthActivityTitle: '🏃 昨日活动', healthAiTitle: '🧠 AI 健康解读',
@@ -399,8 +428,11 @@ const I18N = {
     aiDetailsSummary: '诊断详情', aiWarnings: '⚠️ 异常预警', aiActions: '✅ 行动建议',
     periodDay: '昨日', periodWeek: '本周', periodMonth: '本月', aiNoData: '暂无数据，或还未配置数据源',
     farewellProgressSuffix: ' 进度', investedLabel: '已投入', budgetLabel: '预算',
-    weeklyTitle: '📊 近7天时间分布', weeklyEmpty: '这周还没有打卡记录',
+    weeklyEmpty: '还没有打卡记录',
     funnelTitle: '🎯 求职漏斗',
+    logUnassigned: '其他（不指定任务）', todayShort: '今天', totalShort: '累计',
+    weeksTitle: '📊 每周投入（近 12 周）', otherProjects: '其他项目', weekOf: '周',
+    projTotalTitle: '⏱️ 项目累计投入', unassignedTask: '未指定任务', topTasksTitle: '🔥 最费时的任务', topTasksEmpty: '还没有记到任务上的时间',
     kpiHours: '本周投入', kpiDoing: '进行中任务', kpiWaiting: '等待 / 受阻', kpiDone: '本周完成', segTodo: '待办',
     progressTitle: '🧭 项目推进', progressEmpty: '没有进行中的项目', noTasksYet: '还没有任务',
     staleBadge: '⏸️ 14 天以上没动静', doneTitle: '✅ 本周完成', doneEmpty: '这周还没有完成的任务',
@@ -433,9 +465,9 @@ const I18N = {
     placeholderContactName: 'Name / company / role', placeholderNotes: 'Notes',
     stageApplied: 'Applied', stageScreen: 'Screening / Phone', stageInterview: 'Interviewing', stageFinal: 'Final Round', stageOffer: 'Offer', stageRejected: 'Rejected / Closed',
     stageContacted: 'Message Sent', stageReplied: 'Replied', stageMeeting: 'Meeting Scheduled', stageNoresponse: 'No Response',
-    dailyIntro: 'Tap to log time spent on a thread today — a quick check-in at night works fine.',
+    dailyIntro: 'Log today’s time on specific tasks; anything else goes to “Other”. Project time = sum of its tasks.',
     dailyNoteTitle: '📝 Today’s Notes', placeholderDailyNote: 'What did you work on today (optional)',
-    dailyEmptyActive: 'No threads in "Active" right now',
+    dailyEmptyActive: 'No projects to log (Exploring / Active / Maintaining)',
     tagArchived: ' (archived)', tagWatch: ' (on hold)',
     healthOverviewTitle: '💍 Health Overview (Oura)', healthTrendTitle: '📈 Trends (HRV / Resting HR)',
     healthActivityTitle: '🏃 Yesterday’s Activity', healthAiTitle: '🧠 AI Health Insight',
@@ -458,8 +490,11 @@ const I18N = {
     aiDetailsSummary: 'Diagnosis Details', aiWarnings: '⚠️ Anomaly Warnings', aiActions: '✅ Recommended Actions',
     periodDay: 'Yesterday', periodWeek: 'This Week', periodMonth: 'This Month', aiNoData: 'No data yet, or data source not configured',
     farewellProgressSuffix: ' Progress', investedLabel: 'Invested', budgetLabel: 'Budget',
-    weeklyTitle: '📊 Last 7 Days', weeklyEmpty: 'No check-ins logged this week',
+    weeklyEmpty: 'No hours logged yet',
     funnelTitle: '🎯 Job Funnel',
+    logUnassigned: 'Other (no task)', todayShort: 'Today', totalShort: 'Total',
+    weeksTitle: '📊 Hours per week (last 12)', otherProjects: 'Other projects', weekOf: 'Week of',
+    projTotalTitle: '⏱️ Total hours by project', unassignedTask: 'No task', topTasksTitle: '🔥 Most time-consuming tasks', topTasksEmpty: 'No time logged on tasks yet',
     kpiHours: 'Hours this week', kpiDoing: 'Tasks in progress', kpiWaiting: 'Waiting / blocked', kpiDone: 'Done this week', segTodo: 'To do',
     progressTitle: '🧭 Project Progress', progressEmpty: 'No projects in progress', noTasksYet: 'No tasks yet',
     staleBadge: '⏸️ No activity for 14+ days', doneTitle: '✅ Done This Week', doneEmpty: 'Nothing finished this week yet',
@@ -503,7 +538,7 @@ function applyI18n(){
     const el = document.getElementById(id);
     if(el && (el.textContent === I18N.zh.loading || el.textContent === I18N.en.loading)) el.textContent = t('loading');
   });
-  setText('dashWeeklyTitle', 'weeklyTitle'); setText('dashFunnelTitle', 'funnelTitle');
+  setText('dashWeeksTitle', 'weeksTitle'); setText('dashProjTotalTitle', 'projTotalTitle'); setText('dashTopTasksTitle', 'topTasksTitle'); setText('dashFunnelTitle', 'funnelTitle');
   setText('dashProgressTitle', 'progressTitle'); setText('dashDoneTitle', 'doneTitle');
   setText('modalTitle', 'modalTitle'); setText('modalContinueBtn', 'modalContinue'); setText('modalHoldBtn', 'modalHold');
   setText('modalDoneBtn', 'modalDone'); setText('modalSkipBtn', 'modalSkip');
@@ -1235,6 +1270,14 @@ async function addItem(e, projectId){
   await saveState(); render(); showToast(t('toastAdded'));
 }
 let taskFilter = '';
+function taskTotalHours(taskId){ return Object.values(dailyLog.entries).reduce((sum, e) => sum + taskHoursOf(e, taskId), 0); }
+function taskLogHtml(it){
+  const p = state.tasks.find(x => x.id === it.projectId);
+  const today = taskHoursOf(getEntryIfAny(todayStr(0)), it.id), total = taskTotalHours(it.id);
+  const btns = p && canLogProject(p) ? `<button class="chip btn-sm" onclick="logHours('${p.id}','${it.id}',0.5,todayStr(0))">+0.5h</button>
+      <button class="chip btn-sm" onclick="logHours('${p.id}','${it.id}',1,todayStr(0))">+1h</button>` : '';
+  return `<div class="card-actions" style="margin-bottom:6px;">${btns}<span class="sub" style="font-size:11.5px;">${t('todayShort')} ${today}h · ${t('totalShort')} ${total}h</span></div>`;
+}
 function renderTasks(){
   const live = state.tasks.filter(p => p.column !== 'archived');
   const opt = (p, sel) => `<option value="${p.id}" ${p.id===sel?'selected':''}>${escapeHtml(p.title)}${p.column==='archived' ? t('tagArchived') : ''}</option>`;
@@ -1253,6 +1296,7 @@ function renderTasks(){
       ${list.length ? list.map(it => `<div class="card ${st==='done'?'archived':'active'}">
           <p class="card-title">${escapeHtml(it.title)}</p>
           <p class="task-project">${escapeHtml(title(it.projectId))}</p>
+          ${taskLogHtml(it)}
           <div class="card-actions">
             <select class="stage-select" onchange="setTaskStatus('${it.id}',this.value)">${TASK_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${t(TS_LABEL[s])}</option>`).join('')}</select>
             <button class="chip" onclick="deleteItem('${it.id}')">${t('chipDelete')}</button>
@@ -1446,6 +1490,7 @@ function renderPipeline(){
 
 /* ---- Daily log ---- */
 let selectedDailyDate = null; // 惰性初始化成今天，避免在 todayStr 定义之前就调用它
+function getEntryIfAny(date){ return dailyLog.entries[date] || { hours: {} }; } // read-only: doesn't create a day
 function getEntry(date){
   if(!dailyLog.entries[date]) dailyLog.entries[date] = { hours: {}, note: '' };
   return dailyLog.entries[date];
@@ -1456,12 +1501,30 @@ function changeDailyDate(date){
   document.getElementById('dailyDatePicker').value = date;
   renderDaily();
 }
-async function addHours(taskId, amount){
-  const date = selectedDailyDate || todayStr(0);
+// Hours stay per project in entry.hours (history, Sheet sync and project charts read it);
+// entry.taskHours says which task that time went to. Logging on a task moves both by the same delta,
+// so a project's hours = its tasks' hours + whatever was logged without a task ("unassigned").
+function canLogProject(p){ return ['exploring','active','maintaining'].includes(lifecycleOf(p)); }
+function taskHoursOf(entry, taskId){ return (entry.taskHours && entry.taskHours[taskId]) || 0; }
+function unassignedHours(entry, projectId){
+  const onTasks = state.items.filter(x => x.projectId === projectId).reduce((sum, x) => sum + taskHoursOf(entry, x.id), 0);
+  return Math.max(0, (entry.hours[projectId] || 0) - onTasks);
+}
+async function logHours(projectId, taskId, amount, date){
+  date = date || selectedDailyDate || todayStr(0);
   const entry = getEntry(date);
-  entry.hours[taskId] = Math.max(0, (entry.hours[taskId] || 0) + amount);
+  let delta;
+  if(taskId){
+    entry.taskHours = entry.taskHours || {};
+    const cur = taskHoursOf(entry, taskId);
+    delta = Math.max(0, cur + amount) - cur;
+    entry.taskHours[taskId] = cur + delta;
+  } else {
+    delta = Math.max(-unassignedHours(entry, projectId), amount);
+  }
+  entry.hours[projectId] = Math.max(0, (entry.hours[projectId] || 0) + delta);
   await saveDaily(date);
-  renderDaily();
+  renderDaily(); renderTasks();
 }
 async function saveDailyNote(){
   const date = selectedDailyDate || todayStr(0);
@@ -1479,31 +1542,33 @@ function renderDaily(){
   if(picker.value !== date) picker.value = date;
   const isToday = date === todayStr(0);
   document.getElementById('dailyDateLabel').textContent = isToday ? `📅 ${date}` : `📅 补打卡：${date}`;
-  const tasksToShow = state.tasks.filter(task => task.column === 'active' || (entry.hours[task.id] || 0) > 0);
+  const projects = state.tasks.filter(p => canLogProject(p) || (entry.hours[p.id] || 0) > 0);
+  const btns = (pid, tid, h) => `<div class="log-btns">
+      <button class="chip btn-sm" onclick="logHours('${pid}',${tid ? `'${tid}'` : 'null'},0.5)">+0.5h</button>
+      <button class="chip btn-sm" onclick="logHours('${pid}',${tid ? `'${tid}'` : 'null'},1)">+1h</button>
+      <button class="chip btn-sm" onclick="logHours('${pid}',${tid ? `'${tid}'` : 'null'},2)">+2h</button>
+      ${h > 0 ? `<button class="chip btn-sm" onclick="logHours('${pid}',${tid ? `'${tid}'` : 'null'},-${h})">${CLEAR_LABEL[LANG]}</button>` : ''}
+    </div>`;
+  const row = (label, sub, h, buttons) => `<div class="log-task">
+      <div class="log-task-name">${label}${sub ? ` <span class="sub" style="font-size:11.5px;">${sub}</span>` : ''}</div>
+      <span class="log-today-total">${h > 0 ? h + 'h' : ''}</span>${buttons}
+    </div>`;
   const listEl = document.getElementById('list-dailylog');
-  listEl.innerHTML = tasksToShow.length ? tasksToShow.map(task => {
-    const h = entry.hours[task.id] || 0;
-    const canLog = task.column === 'active';
-    const tagText = task.column === 'archived' ? t('tagArchived') : t('tagWatch');
+  listEl.innerHTML = projects.length ? projects.map(p => {
+    const total = entry.hours[p.id] || 0;
+    const canLog = canLogProject(p);
+    const tasks = state.items.filter(x => x.projectId === p.id && (x.status !== 'done' || taskHoursOf(entry, x.id) > 0));
+    const un = unassignedHours(entry, p.id);
+    const tag = canLog ? '' : ` <span class="sub" style="font-weight:400; font-size:11.5px;">${p.column === 'archived' ? t('tagArchived') : t('tagWatch')}</span>`;
     return `<div class="log-row">
-      <div class="log-row-title"><span>${escapeHtml(task.title)}${!canLog ? ` <span class="sub" style="font-weight:400; font-size:11.5px;">${tagText}</span>` : ''}</span><span class="log-today-total">${h > 0 ? h + 'h' : ''}</span></div>
-      ${canLog ? `<div class="log-btns">
-        <button class="chip btn-sm" onclick="addHours('${task.id}',0.5)">+0.5h</button>
-        <button class="chip btn-sm" onclick="addHours('${task.id}',1)">+1h</button>
-        <button class="chip btn-sm" onclick="addHours('${task.id}',2)">+2h</button>
-        ${h > 0 ? `<button class="chip btn-sm" onclick="resetHours('${task.id}')">${CLEAR_LABEL[LANG]}</button>` : ''}
-      </div>` : ''}
+      <div class="log-row-title"><span>${escapeHtml(p.title)}${tag}</span><span class="log-today-total">${total > 0 ? total + 'h' : ''}</span></div>
+      ${tasks.map(x => row(escapeHtml(x.title), t(TS_LABEL[x.status]), taskHoursOf(entry, x.id), canLog ? btns(p.id, x.id, taskHoursOf(entry, x.id)) : '')).join('')}
+      ${canLog || un > 0 ? row(`<span class="sub">${t('logUnassigned')}</span>`, '', un, canLog ? btns(p.id, null, un) : '') : ''}
     </div>`;
   }).join('') : `<div class="empty">${t('dailyEmptyActive')}</div>`;
   document.getElementById('dailyNoteInput').value = entry.note || '';
 }
-async function resetHours(taskId){
-  const date = selectedDailyDate || todayStr(0);
-  const entry = getEntry(date);
-  entry.hours[taskId] = 0;
-  await saveDaily(date);
-  renderDaily();
-}
+
 
 /* ---- Dashboard ---- */
 function last7Days(){
@@ -1565,16 +1630,62 @@ function renderDashboard(){
     </div>`;
   }).join('');
 
-  // Weekly bar chart (includes archived projects so past logged hours don't disappear once archived)
   const days = last7Days();
-  const totals = state.tasks.map(task => ({ task, h: sumHoursForTask(task.id, days) })).filter(x => x.h > 0);
-  const maxH = Math.max(1, ...totals.map(x => x.h));
-  const barsEl = document.getElementById('weeklyBars');
-  barsEl.innerHTML = totals.length ? totals.sort((a,b)=>b.h-a.h).map(x => `
-    <div class="bar-row">
-      <div class="bar-label"><span>${escapeHtml(x.task.title)}${x.task.column === 'archived' ? ` <span class="sub" style="font-weight:400;">${t('tagArchived')}</span>` : ''}</span><span>${x.h}h</span></div>
-      <div class="bar-track" title="${escapeHtml(x.task.title)}：${x.h}h"><div class="bar-fill" style="width:${(x.h/maxH*100)}%;"></div></div>
-    </div>`).join('') : `<div class="empty">${t('weeklyEmpty')}</div>`;
+  const projTitle = id => (state.tasks.find(p => p.id === id) || {}).title || '';
+  const archTag = p => p.column === 'archived' ? t('tagArchived') : '';
+  const esc = x => escapeHtml(String(x));
+
+  // Series slots: top 4 projects by all-time hours keep their own color; the rest share "other".
+  const totals = state.tasks.map(p => ({ p, h: allTimeHoursForTask(p.id) })).filter(x => x.h > 0).sort((a,b) => b.h - a.h);
+  const slotOf = {}; totals.slice(0, 4).forEach((x, i) => slotOf[x.p.id] = 's' + (i + 1));
+  const colorOf = k => `var(--${slotOf[k] || 's-other'})`;
+
+  // Weekly stacked columns, last 12 weeks (Mon–Sun); empty weeks stay as zero so gaps show.
+  const monday = d => { const x = new Date(d + 'T00:00:00'); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
+  const weeks = [];
+  for(let i = 11; i >= 0; i--){ const m = monday(todayStr(0)); m.setDate(m.getDate() - 7 * i); weeks.push(m); }
+  const weekData = weeks.map(m => {
+    const ds = []; for(let k = 0; k < 7; k++){ const d = new Date(m); d.setDate(d.getDate() + k); ds.push(fmtDate(d.getTime())); }
+    const byKey = {};
+    const parts = state.tasks.map(p => [p, sumHoursForTask(p.id, ds)]).filter(x => x[1] > 0).sort((a,b) => b[1] - a[1]);
+    parts.forEach(([p, h]) => { const k = slotOf[p.id] ? p.id : 'other'; byKey[k] = (byKey[k] || 0) + h; });
+    return { m, byKey, parts, total: parts.reduce((a, x) => a + x[1], 0) };
+  });
+  const maxW = Math.max(1, ...weekData.map(w => w.total));
+  const order = [...totals.slice(0, 4).map(x => x.p.id), ...(totals.length > 4 ? ['other'] : [])];
+  document.getElementById('weeksLegend').innerHTML = order
+    .map(k => `<span><i style="background:${colorOf(k)}"></i>${k === 'other' ? t('otherProjects') : esc(projTitle(k))}</span>`).join('');
+  const md = m => `${m.getMonth() + 1}/${m.getDate()}`;
+  document.getElementById('weeksChart').innerHTML = weekData.map(w => {
+    const tip = `${t('weekOf')} ${md(w.m)} · ${w.total}h` + w.parts.map(([p, h]) => `\n${p.title}  ${h}h`).join('');
+    return `<div class="wk-col" data-tip="${esc(tip)}" tabindex="0" aria-label="${esc(tip)}">
+      ${w.total ? `<div class="wk-total">${w.total}</div>` : ''}
+      <div class="wk-stack">${order.filter(k => w.byKey[k]).map(k => `<span style="height:${w.byKey[k] / maxW * 150}px; background:${colorOf(k)}"></span>`).join('')}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('weeksLabels').innerHTML = weekData.map(w => `<span>${md(w.m)}</span>`).join('');
+
+  // All-time hours per project (ranked, one hue); expand a project for its per-task split.
+  const hbar = (label, tipLabel, h, max, color, extra) => `<div class="hbar ${extra || ''}" data-tip="${esc(tipLabel)}  ${h}h">
+      <span>${label}</span><span class="hbar-val">${h}h</span>
+      <div class="hbar-track"><span style="width:${h / max * 100}%; background:${color}"></span></div>
+    </div>`;
+  const maxP = Math.max(1, ...totals.map(x => x.h));
+  document.getElementById('projTotals').innerHTML = totals.length ? totals.map(({ p, h }) => {
+    const items = state.items.filter(x => x.projectId === p.id).map(x => ({ x, h: taskTotalHours(x.id) })).filter(y => y.h > 0).sort((a,b) => b.h - a.h);
+    const un = Math.round((h - items.reduce((a, y) => a + y.h, 0)) * 10) / 10;
+    const rows = [...items.map(y => [esc(y.x.title), y.x.title, y.h]), ...(un > 0 ? [[`<span class="sub">${t('unassignedTask')}</span>`, t('unassignedTask'), un]] : [])];
+    return `<details class="proj-total"><summary>${hbar(`▸ ${esc(p.title)}${archTag(p)}`, p.title, h, maxP, 'var(--active)')}</summary>
+      ${rows.map(([n, tn, v]) => hbar(n, tn, v, h, 'var(--seg-doing)', 'sub-bar')).join('')}
+    </details>`;
+  }).join('') : `<div class="empty">${t('weeklyEmpty')}</div>`;
+
+  // Most time-consuming tasks across all projects.
+  const topT = state.items.map(x => ({ x, h: taskTotalHours(x.id) })).filter(y => y.h > 0).sort((a,b) => b.h - a.h).slice(0, 10);
+  const maxT = Math.max(1, ...topT.map(y => y.h));
+  document.getElementById('topTasks').innerHTML = topT.length ? `<div class="card active" style="padding:8px 14px;">` +
+    topT.map(y => hbar(`${esc(y.x.title)} <span class="sub">· ${esc(projTitle(y.x.projectId))}</span>`, y.x.title, y.h, maxT, 'var(--active)')).join('') + `</div>`
+    : `<div class="empty">${t('topTasksEmpty')}</div>`;
 
   // KPI row: the four numbers a weekly review starts from.
   const cutoff7 = new Date(days[0] + 'T00:00:00').getTime();
@@ -1615,7 +1726,6 @@ function renderDashboard(){
 
   // Done this week. shortcut: uses the task's updatedAt (set on every status change) as the finish time; add a doneAt field if tasks become editable after Done.
   const done = doneWeek.sort((a,b) => b.updatedAt - a.updatedAt);
-  const projTitle = id => (state.tasks.find(p => p.id === id) || {}).title || '';
   document.getElementById('doneList').innerHTML = done.length ? `<div class="card active" style="padding:6px 14px;">` +
     done.map(x => `<div class="streak-row"><span>${escapeHtml(x.title)}</span><span class="sub">${escapeHtml(projTitle(x.projectId))}</span></div>`).join('') +
     `</div>` : `<div class="empty">${t('doneEmpty')}</div>`;
@@ -1631,6 +1741,16 @@ function renderFunnel(){
     stages.map(s => `<div class="streak-row"><span>${stageLabel(s)}</span><span>${counts[s]}</span></div>`).join('') +
     `</div>`;
 }
+
+// One tooltip for every [data-tip] chart mark (mouse hover and keyboard focus).
+(function(){
+  const tip = () => document.getElementById('vizTip');
+  const show = (el, x, y) => { const t = tip(); t.textContent = el.dataset.tip; t.style.display = 'block';
+    t.style.left = Math.max(8, Math.min(x + 12, innerWidth - t.offsetWidth - 8)) + 'px'; t.style.top = Math.max(8, y - t.offsetHeight - 10) + 'px'; };
+  document.addEventListener('mousemove', e => { const el = e.target.closest && e.target.closest('[data-tip]'); el ? show(el, e.clientX, e.clientY) : (tip().style.display = 'none'); });
+  document.addEventListener('focusin', e => { const el = e.target.closest && e.target.closest('[data-tip]'); if(el){ const r = el.getBoundingClientRect(); show(el, r.left, r.top); } });
+  document.addEventListener('focusout', () => tip().style.display = 'none');
+})();
 
 applyI18n();
 loadState();
