@@ -50,6 +50,7 @@
     .tabs{justify-content:flex-start;}
     .tab{flex:0 0 auto; padding:10px 18px; font-size:13.5px;}
     .board{display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:14px; align-items:start;}
+    .tasks-board{grid-template-columns:repeat(6, minmax(0,1fr)); gap:12px;}
     .board .col{background:#efede7; border-radius:16px; padding:12px; margin-bottom:0;}
     .add-form{max-width:560px;}
     #view-pipeline, #view-daily, #view-health, #view-dash{max-width:900px;}
@@ -64,6 +65,7 @@
   .col-title{font-weight:700; font-size:14.5px;}
   .col-count{color:var(--sub); font-size:12.5px;}
   .col-desc{color:var(--sub); font-size:12px; margin:-4px 0 8px;}
+  .task-project{font-size:11.5px; color:var(--sub); margin:0 0 6px;}
   .card{
     background:var(--card); border-radius:14px; padding:12px 14px; margin-bottom:10px;
     box-shadow:0 1px 2px rgba(0,0,0,0.05); border-left:4px solid transparent;
@@ -178,6 +180,7 @@
   <p class="sub" id="lastCheckin">加载中…</p>
   <div class="tabs">
     <div class="tab on" id="tab-kanban" onclick="switchTab('kanban')">宏观看板</div>
+    <div class="tab" id="tab-tasks" onclick="switchTab('tasks')">任务</div>
     <div class="tab" id="tab-pipeline" onclick="switchTab('pipeline')">求职明细</div>
     <div class="tab" id="tab-daily" onclick="switchTab('daily')">今日打卡</div>
     <div class="tab" id="tab-health" onclick="switchTab('health')">健康总览</div>
@@ -205,6 +208,19 @@
   </div>
 
   <!-- PIPELINE VIEW -->
+  <!-- TASKS VIEW: every project's tasks on one six-column board -->
+  <div class="view" id="view-tasks">
+    <div class="toolbar" style="margin:14px 0;">
+      <select class="stage-select" id="taskFilter" onchange="taskFilter=this.value; renderTasks()" aria-label="Project"></select>
+      <form class="task-add" id="taskAddForm" onsubmit="addItem(event)" style="flex:1; margin:0; min-width:260px;">
+        <input name="title" id="taskAddTitle">
+        <select class="stage-select" name="project" id="taskAddProject" aria-label="Project"></select>
+        <button class="chip" id="taskAddBtn"></button>
+      </form>
+    </div>
+    <div class="board tasks-board" id="taskBoard"></div>
+  </div>
+
   <div class="view" id="view-pipeline">
     <p class="sub" id="pipelineIntro" style="margin:14px 0 0;">这里是随时更新的执行细节，不进每周确认流程。</p>
     <div class="pipeline-section-title" id="pipelineCompaniesTitle">📋 公司 / 面试进度</div>
@@ -325,7 +341,7 @@ const I18N = {
     appTitle: '🗂️ 多线程任务看板', pageTitle: '多线程任务看板',
     loading: '加载中…',
     lastCheckinPrefix: '上次确认：', neverCheckedIn: '还没有做过每周确认',
-    tabKanban: '宏观看板', tabPipeline: '求职明细', tabDaily: '今日打卡', tabHealth: '健康总览', tabDash: 'Dashboard',
+    tabKanban: '宏观看板', tabTasks: '任务', allProjects: '全部 Project', tabPipeline: '求职明细', tabDaily: '今日打卡', tabHealth: '健康总览', tabDash: 'Dashboard',
     btnStartCheckin: '开始每周确认', btnAddThread: '+ 新增线程',
     formTitleAdd: '新增线程', formTitleEdit: '编辑线程',
     placeholderThreadName: '线程名称，例如：面签复审', placeholderNotesOptional: '备注（可选）',
@@ -383,7 +399,7 @@ const I18N = {
     appTitle: '🗂️ Multi-Thread Task Board', pageTitle: 'Multi-Thread Task Board',
     loading: 'Loading…',
     lastCheckinPrefix: 'Last check-in: ', neverCheckedIn: 'No weekly check-in yet',
-    tabKanban: 'Board', tabPipeline: 'Job Pipeline', tabDaily: 'Daily Log', tabHealth: 'Health Overview', tabDash: 'Dashboard',
+    tabKanban: 'Board', tabTasks: 'Tasks', allProjects: 'All projects', tabPipeline: 'Job Pipeline', tabDaily: 'Daily Log', tabHealth: 'Health Overview', tabDash: 'Dashboard',
     btnStartCheckin: 'Start Weekly Check-in', btnAddThread: '+ Add Thread',
     formTitleAdd: 'Add Thread', formTitleEdit: 'Edit Thread',
     placeholderThreadName: 'Thread name, e.g. Visa interview follow-up', placeholderNotesOptional: 'Notes (optional)',
@@ -447,7 +463,7 @@ function applyI18n(){
   document.title = t('pageTitle');
   setText('appTitle', 'appTitle');
   document.getElementById('langToggle').textContent = LANG === 'zh' ? 'EN' : '中文'; // shows the language you can switch TO
-  setText('tab-kanban', 'tabKanban'); setText('tab-pipeline', 'tabPipeline'); setText('tab-daily', 'tabDaily');
+  setText('tab-kanban', 'tabKanban'); setText('tab-tasks', 'tabTasks'); setText('tab-pipeline', 'tabPipeline'); setText('tab-daily', 'tabDaily');
   setText('tab-health', 'tabHealth'); setText('tab-dash', 'tabDash');
   setText('btnStartCheckin', 'btnStartCheckin'); setText('btnAddThread', 'btnAddThread');
   setText('addFormTitle', editingTaskId ? 'formTitleEdit' : 'formTitleAdd');
@@ -1129,7 +1145,7 @@ function fmtDate(ts){
 }
 
 function switchTab(name){
-  ['kanban','pipeline','daily','health','dash'].forEach(n => {
+  ['kanban','tasks','pipeline','daily','health','dash'].forEach(n => {
     document.getElementById('tab-'+n).classList.toggle('on', n===name);
     document.getElementById('view-'+n).classList.toggle('on', n===name);
   });
@@ -1148,6 +1164,7 @@ function render(){
       ${list.length ? list.map(cardHtml).join('') : `<div class="empty">${t('emptyNone')}</div>`}
     </div>`;
   }).join('');
+  renderTasks();
   document.getElementById('lastCheckin').textContent = state.lastCheckin
     ? `${t('lastCheckinPrefix')}${fmtDate(state.lastCheckin)}` : t('neverCheckedIn');
 }
@@ -1193,10 +1210,39 @@ function tasksHtml(p){
 async function addItem(e, projectId){
   e.preventDefault();
   const title = e.target.elements.title.value.trim(); // form.title is the attribute, not the input
-  if(!title) return;
+  projectId = projectId || e.target.elements.project.value; // tasks tab picks the project in the form
+  if(!title || !state.tasks.some(p => p.id === projectId)) return;
   state.items.push({ id: uid(), projectId, title, status: 'inbox', updatedAt: Date.now() });
+  e.target.elements.title.value = '';
   openProjects.add(projectId);
   await saveState(); render(); showToast(t('toastAdded'));
+}
+let taskFilter = '';
+function renderTasks(){
+  const live = state.tasks.filter(p => p.column !== 'archived');
+  const opt = (p, sel) => `<option value="${p.id}" ${p.id===sel?'selected':''}>${escapeHtml(p.title)}${p.column==='archived' ? t('tagArchived') : ''}</option>`;
+  if(taskFilter && !state.tasks.some(p => p.id === taskFilter)) taskFilter = '';
+  document.getElementById('taskFilter').innerHTML = `<option value="">${t('allProjects')}</option>` + state.tasks.map(p => opt(p, taskFilter)).join('');
+  const addSel = document.getElementById('taskAddProject');
+  addSel.innerHTML = live.map(p => opt(p, taskFilter || addSel.value)).join('');
+  document.getElementById('taskAddTitle').placeholder = t('placeholderNewTask');
+  document.getElementById('taskAddBtn').textContent = t('btnAdd');
+  const items = state.items.filter(x => !taskFilter || x.projectId === taskFilter);
+  const title = id => (state.tasks.find(p => p.id === id) || {}).title || '';
+  document.getElementById('taskBoard').innerHTML = TASK_STATUS.map(st => {
+    const list = items.filter(x => x.status === st);
+    return `<div class="col">
+      <div class="col-head"><span class="col-title">${t(TS_LABEL[st])}</span><span class="col-count">${list.length ? `(${list.length})` : ''}</span></div>
+      ${list.length ? list.map(it => `<div class="card ${st==='done'?'archived':'active'}">
+          <p class="card-title">${escapeHtml(it.title)}</p>
+          <p class="task-project">${escapeHtml(title(it.projectId))}</p>
+          <div class="card-actions">
+            <select class="stage-select" onchange="setTaskStatus('${it.id}',this.value)">${TASK_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${t(TS_LABEL[s])}</option>`).join('')}</select>
+            <button class="chip" onclick="deleteItem('${it.id}')">${t('chipDelete')}</button>
+          </div>
+        </div>`).join('') : `<div class="empty">${t('emptyNone')}</div>`}
+    </div>`;
+  }).join('');
 }
 async function setTaskStatus(id, status){
   const it = state.items.find(x => x.id === id);
