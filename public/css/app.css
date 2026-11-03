@@ -286,9 +286,9 @@
   .hy-run{position:absolute; top:2px; bottom:2px; border-radius:3px; min-width:2px;}
   .hy-axis .hy-track{position:relative; height:16px;}
   .hy-axis .hy-track span{position:absolute; top:2px; font-size:10.5px; color:var(--sub); white-space:nowrap;}
-  .fl-chart{position:relative; margin:10px 0 0 34px;}
+  .fl-chart{position:relative; margin:26px 0 0 48px;} /* top room for the duration labels, left gutter for the clock axis */
   .fl-grid{position:absolute; left:0; right:0; border-top:1px dashed var(--line);}
-  .fl-grid span{position:absolute; left:-36px; top:-7px; font-size:10.5px; color:var(--sub);}
+  .fl-grid span{position:absolute; left:-48px; width:38px; text-align:right; top:-7px; font-size:10.5px; color:var(--sub);}
   .fl-cols{position:absolute; inset:0; display:flex; gap:8px;}
   .fl-cols.dense{gap:2px;}
   .fl-col{flex:1; position:relative; outline:none;}
@@ -296,7 +296,7 @@
   .fl-bar span{display:block;}
   .fl-val{position:absolute; left:0; right:0; text-align:center;}
   .fl-col:hover .fl-bar, .fl-col:focus .fl-bar{filter:brightness(1.08);}
-  .fl-chart + .sl-labels{margin-left:34px;}
+  .fl-chart + .sl-labels{margin-left:48px; margin-top:6px;}
   .card.ts-inbox, .card.ts-backlog, .card.ts-ready{border-left-color:var(--seg-todo);}
   .card.ts-doing{border-left-color:var(--seg-doing);}
   .card.ts-waiting{border-left-color:var(--seg-waiting);}

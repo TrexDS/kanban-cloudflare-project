@@ -159,7 +159,8 @@ function timingOf(r){
   const runs = [];
   for(let i = 0; i < ph.length; i++){ const k = PHASE[ph[i]], l = runs[runs.length - 1]; if(l && l.k === k) l.n++; else runs.push({ k, i, n: 1 }); }
   const wake = clockMin(r['Bedtime End']);
-  return { start, len: ph.length * 5, wake: wake !== null && wake > start ? wake : start + ph.length * 5, runs };
+  return { start, len: ph.length * 5, wake: wake !== null && wake > start ? wake : start + ph.length * 5, runs,
+    asleep: runs.filter(x => x.k !== 'awake').reduce((a, x) => a + x.n * 5, 0) }; // from the phases, so it always matches the bar
 }
 // Weekly bars only: fold stretches under 15 min into the one before, so each night reads as a few phases, not a barcode
 // (the last-night timeline and all totals keep the full 5-minute detail).
@@ -198,7 +199,7 @@ function renderOuraSleep(){
       <span>${t('stage_' + k)}<span class="sub">${t('stage_' + k + 'Desc')}</span></span><b>${fmtMin(s[k])}</b><span class="sub">${Math.round(s[k] / bed * 100)}%</span></div>`).join('');
 
   // last N nights as Apple-style floating bars on a clock axis: bedtime at the top, wake-up at the bottom, coloured by stage
-  const week = nights.slice(-healthRange).map(r => ({ r, ...stagesOf(r), tm: timingOf(r) })), dense = week.length > 10;
+  const week = nights.slice(-healthRange).map(r => { const x = { r, ...stagesOf(r), tm: timingOf(r) }; if(x.tm) x.asleep = x.tm.asleep; return x; }), dense = week.length > 10;
   const every = Math.ceil(week.length / 8); // date labels: at most ~8 under the bars
   const timed = week.filter(x => x.tm), avgWeek = average(week.map(x => x.asleep));
   const lo = timed.length ? Math.floor(Math.min(...timed.map(x => x.tm.start)) / 60) * 60 : 0;
