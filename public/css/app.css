@@ -10,7 +10,7 @@
     --warn:#b46258; --warn-bg:#f7e9e7; --warn-ink:#9a4d44;
     --sleep-awake:#e3e8ec; --sleep-rem:#b4c6d3; --sleep-light:#7f9db3; --sleep-deep:#3f6a82;
     --ring-sleep:#5289ad; --ring-ready:#a6a9d0; --ring-activity:#e5aea9;
-    --stress:#e5aea9; --recovery:#5289ad;
+    --stress:#c7984f; --recovery:var(--ring-ready); /* one meaning per colour: recovery = the ring's lavender, stress ≠ activity pink */
   }
   *{box-sizing:border-box;}
   body{
@@ -301,6 +301,6 @@
   .card.ts-doing{border-left-color:var(--seg-doing);}
   .card.ts-waiting{border-left-color:var(--seg-waiting);}
   .card.ts-done{border-left-color:var(--line-strong); opacity:0.7;}
-  .alert-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin:0 8px 1px 0; background:var(--ring-activity);}
+  .alert-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin:0 8px 1px 0; background:var(--stress);}
   .alert-dot.bad{background:var(--warn);}
 
