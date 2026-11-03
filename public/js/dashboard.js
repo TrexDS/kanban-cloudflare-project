@@ -31,7 +31,8 @@ function daysBetween(dateStr){
 async function renderHealthOverview(){
   await loadOuraRows();
   renderOuraOverview();
-  renderOuraTrend();
+  renderOuraSleep();
+  renderOuraVitals();
   renderOuraActivity();
   loadOuraAnalysis();
 }

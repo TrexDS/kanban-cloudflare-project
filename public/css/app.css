@@ -4,6 +4,10 @@
     --watch:#a3742f; --watch-bg:#faf1e2;
     --archived:#8a8578; --archived-bg:#efefec;
     --accent:#c1573f;
+    /* Health charts. Sleep stages = one blue ramp light→dark by depth (validated --ordinal) + orange for awake;
+       score rings = categorical slots 1-3 (validated all-pairs). */
+    --sleep-awake:#eb6834; --sleep-rem:#86b6ef; --sleep-light:#3987e5; --sleep-deep:#184f95;
+    --ring-sleep:#2a78d6; --ring-ready:#eb6834; --ring-activity:#1baf7a;
   }
   *{box-sizing:border-box;}
   body{
@@ -45,7 +49,7 @@
     .tasks-board{grid-template-columns:repeat(6, minmax(0,1fr)); gap:12px;}
     .board .col{background:#efede7; border-radius:16px; padding:12px; margin-bottom:0;}
     .add-form{max-width:560px;}
-    #view-pipeline, #view-daily, #view-health{max-width:900px;}
+    #view-pipeline, #view-daily{max-width:900px;}
     .dash-grid{display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:18px; align-items:start;}
     .dash-grid .panel{background:#efede7; border-radius:16px; padding:4px 16px 14px; margin-bottom:18px;}
     .dash-grid .panel .dash-section-title{margin-top:12px;}
@@ -206,3 +210,42 @@
     font-size:13px; opacity:0; transition:opacity .25s; z-index:200; pointer-events:none;
   }
   .toast.show{opacity:1;}
+  /* Health page */
+  .health-verdict{font-weight:600; font-size:14.5px; margin:2px 0 10px;}
+  .health-sub-title{font-weight:600; font-size:13.5px; margin:16px 0 6px;}
+  .ring-wrap{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  .ring-wrap svg{flex:none;}
+  .ring-legend{flex:1; min-width:200px;}
+  .ring-row{display:grid; grid-template-columns:10px minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:5px 0; font-size:13.5px; border-bottom:1px solid #e5e2da;}
+  .ring-row:last-child{border-bottom:none;}
+  .ring-row i{width:10px; height:10px; border-radius:3px;}
+  .ring-row > span:nth-child(2) .sub{display:block; font-size:11.5px;}
+  .sl-chart{position:relative; border-bottom:1px solid #dcd8ce;}
+  .sl-grid{position:absolute; left:0; right:0; border-top:1px dashed #d6d2c7;}
+  .sl-grid.goal{border-top-color:var(--sub);}
+  .sl-grid span{position:absolute; right:0; top:-15px; font-size:10.5px; color:var(--sub);}
+  .sl-cols{position:absolute; inset:0; display:flex; align-items:flex-end; gap:8px;}
+  .sl-col{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; outline:none;}
+  .sl-val{font-size:10.5px; color:var(--sub); margin-bottom:3px; white-space:nowrap;}
+  .sl-stack{width:min(100%, 34px); display:flex; flex-direction:column; gap:2px;}
+  .sl-stack span{display:block; border-radius:0;}
+  .sl-stack span:first-child{border-radius:4px 4px 0 0;}
+  .sl-col:hover .sl-stack, .sl-col:focus .sl-stack{filter:brightness(1.08);}
+  .sl-labels{display:flex; gap:8px; margin-top:4px;}
+  .sl-labels span{flex:1; text-align:center; font-size:11px; color:var(--sub);}
+  .vital{background:#fff; border-radius:12px; padding:10px 12px; margin-bottom:8px;}
+  .vital-head{display:flex; justify-content:space-between; align-items:baseline; font-size:13.5px; font-weight:600;}
+  .vital-head b{font-size:17px;} .vital-head small{font-size:11.5px; color:var(--sub); font-weight:400;}
+  .vital-track{position:relative; height:16px; margin:8px 0 6px; background:#f2f0ea; border-radius:8px;}
+  .vital-band{position:absolute; top:0; bottom:0; background:var(--active-bg); border:1px solid #cfe3da; border-radius:8px;}
+  .vital-dot{position:absolute; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:#b9b4a8;}
+  .vital-dot.now{width:12px; height:12px; margin:-6px 0 0 -6px; background:var(--active); box-shadow:0 0 0 2px #fff;}
+  .vital-dot.now.warn{background:var(--watch);}
+  .vital-foot{display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:12.5px; margin-bottom:2px;}
+  .vital-ok{color:var(--active); font-weight:600;} .vital-warn{color:var(--watch); font-weight:600;}
+  .vital-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; margin-top:4px;}
+  .vital-legend i{display:inline-block; vertical-align:middle; margin-right:4px;}
+  .vital-band-key{width:16px; height:8px; background:var(--active-bg); border:1px solid #cfe3da; border-radius:4px;}
+  .vital-dot-key{width:9px; height:9px; border-radius:50%; background:var(--active);}
+  .vital-dot-key.past{width:6px; height:6px; background:#b9b4a8;}
+
