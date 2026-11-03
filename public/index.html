@@ -1513,7 +1513,7 @@ function staleDaysAgoText(n){ return LANG === 'zh' ? `已 ${n} 天没打卡` : `
 
 function renderDashboard(){
   // Farewell video progress
-  const fv = state.tasks.find(task => task.budgetHours);
+  const fv = state.tasks.find(task => task.budgetHours && task.column !== 'archived'); // archived projects stop being tracked
   const fvCard = document.getElementById('farewellProgressCard');
   if(fv){
     const done = allTimeHoursForTask(fv.id);
