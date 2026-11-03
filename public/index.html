@@ -66,6 +66,13 @@
   .chip.danger{color:var(--accent); border-color:#f0d6cd;}
   .chip.hours{background:var(--active-bg); color:var(--active); border-color:transparent; font-weight:600;}
   .empty{color:var(--sub); font-size:13px; padding:6px 2px;}
+  .card-tasks{margin:0 0 8px; font-size:13px;}
+  .card-tasks summary{cursor:pointer; color:var(--sub); font-size:12.5px;}
+  .task-row{display:flex; gap:6px; align-items:center; margin:6px 0;}
+  .task-row span{flex:1; min-width:0; overflow-wrap:anywhere;}
+  .task-row.done span{text-decoration:line-through; color:var(--sub);}
+  .task-add{display:flex; gap:6px; margin-top:6px;}
+  .task-add input{flex:1; min-width:0; border:1px solid #e0dccf; border-radius:8px; padding:6px 8px; font-family:inherit; font-size:13px;}
   .stage-badge{
     display:inline-block; font-size:11px; padding:3px 9px; border-radius:20px;
     font-weight:600; margin-bottom:6px;
@@ -319,7 +326,7 @@ const I18N = {
     placeholderThreadName: '线程名称，例如：面签复审', placeholderNotesOptional: '备注（可选）',
     btnSave: '保存', btnCancel: '取消',
     colActive: '推进中', colWatch: '搁置 / 观望', colArchived: '已归档',
-    chipResume: '继续推进', chipHold: '搁置', chipArchive: '归档', chipEdit: '编辑', chipDelete: '删除',
+    chipEdit: '编辑', chipDelete: '删除',
     emptyNone: '— 暂无 —',
     metaUpdatedPrefix: '更新于 ',
     toastUpdated: '已更新', toastDeleted: '已删除', toastAdded: '已新增', toastSaved: '已保存',
@@ -362,7 +369,10 @@ const I18N = {
     streakTitle: '🔥 连续打卡', streakEmpty: '暂无',
     staleTitle: '⏸️ 长期没动的线程', staleNever: '还没打过卡', staleEmpty: '目前没有长期停滞的线程',
     modalTitle: '每周确认', modalContinue: '继续推进', modalHold: '先搁置', modalDone: '已完成 / 归档', modalSkip: '跳过这条',
-    modalNotePlaceholder: '这周的进展 / 备注（可选，会追加到这条线程）'
+    modalNotePlaceholder: '这周的进展 / 备注（可选，会追加到这条线程）',
+    lcExploring: '探索中', lcActive: '推进中', lcOnHold: '搁置', lcMaintaining: '维护中', lcArchived: '已归档',
+    tsInbox: '收件箱', tsBacklog: '待排', tsReady: '可开始', tsDoing: '进行中', tsWaiting: '等待 / 受阻', tsDone: '完成',
+    tasksSummary: '任务', placeholderNewTask: '新任务…', btnAdd: '添加'
   },
   en: {
     appTitle: '🗂️ Multi-Thread Task Board', pageTitle: 'Multi-Thread Task Board',
@@ -374,7 +384,7 @@ const I18N = {
     placeholderThreadName: 'Thread name, e.g. Visa interview follow-up', placeholderNotesOptional: 'Notes (optional)',
     btnSave: 'Save', btnCancel: 'Cancel',
     colActive: 'Active', colWatch: 'On Hold', colArchived: 'Archived',
-    chipResume: 'Resume', chipHold: 'Hold', chipArchive: 'Archive', chipEdit: 'Edit', chipDelete: 'Delete',
+    chipEdit: 'Edit', chipDelete: 'Delete',
     emptyNone: '— None —',
     metaUpdatedPrefix: 'Updated ',
     toastUpdated: 'Updated', toastDeleted: 'Deleted', toastAdded: 'Added', toastSaved: 'Saved',
@@ -417,7 +427,10 @@ const I18N = {
     streakTitle: '🔥 Streaks', streakEmpty: 'None',
     staleTitle: '⏸️ Stalled Threads', staleNever: 'Never logged', staleEmpty: 'No long-stalled threads right now',
     modalTitle: 'Weekly Check-in', modalContinue: 'Keep Going', modalHold: 'Put on Hold', modalDone: 'Done / Archive', modalSkip: 'Skip',
-    modalNotePlaceholder: 'This week’s progress / notes (optional, appended to this thread)'
+    modalNotePlaceholder: 'This week’s progress / notes (optional, appended to this thread)',
+    lcExploring: 'Exploring', lcActive: 'Active', lcOnHold: 'On Hold', lcMaintaining: 'Maintaining', lcArchived: 'Archived',
+    tsInbox: 'Inbox', tsBacklog: 'Backlog', tsReady: 'Ready', tsDoing: 'In Progress', tsWaiting: 'Waiting / Blocked', tsDone: 'Done',
+    tasksSummary: 'Tasks', placeholderNewTask: 'New task…', btnAdd: 'Add'
   }
 };
 function t(key){ return (I18N[LANG] && I18N[LANG][key] !== undefined) ? I18N[LANG][key] : (I18N.zh[key] !== undefined ? I18N.zh[key] : key); }
@@ -902,7 +915,7 @@ function renderOuraAnalysisCard(period){
     </details>
      <p class="card-meta">${escapeHtml(latest['Date'] || '')}</p>`;
 }
-let state = { tasks: [], lastCheckin: null };
+let state = { tasks: [], items: [], lastCheckin: null }; // tasks = Projects (legacy name kept for rollback), items = Tasks
 let pipeline = { companies: [], contacts: [] };
 let dailyLog = { entries: {} }; // entries[date] = { hours: {taskId: h}, note: '' }
 let checkinQueue = [];
@@ -982,6 +995,7 @@ async function loadState(){
     const val = await kvGetWithRetry(STORAGE_KEY);
     if(val){
       state = val;
+      state.items = state.items || []; // docs saved before the Project/Task split have no items
     } else {
       // KV 里确实没有数据（可能是首次使用，也可能是异常情况）。
       // 只在界面上先"展示"一份初始模板，绝不在这里自动 saveState()——
@@ -1133,17 +1147,74 @@ function render(){
     ? `${t('lastCheckinPrefix')}${fmtDate(state.lastCheckin)}` : t('neverCheckedIn');
 }
 
+// Project lifecycle: `column` stays the source of truth (other views and old builds read it);
+// `phase` only refines it, and is ignored once it no longer matches the column.
+const LIFECYCLE = { exploring:'active', active:'active', on_hold:'watch', maintaining:'watch', archived:'archived' };
+const LC_LABEL = { exploring:'lcExploring', active:'lcActive', on_hold:'lcOnHold', maintaining:'lcMaintaining', archived:'lcArchived' };
+function lifecycleOf(p){
+  if(p.phase && LIFECYCLE[p.phase] === p.column) return p.phase;
+  return { active:'active', watch:'on_hold', archived:'archived' }[p.column];
+}
+async function setLifecycle(id, lc){
+  const p = state.tasks.find(x => x.id === id);
+  if(!p || !LIFECYCLE[lc]) return;
+  p.column = LIFECYCLE[lc];
+  if(lc === 'exploring' || lc === 'maintaining') p.phase = lc; else delete p.phase;
+  p.updatedAt = Date.now();
+  await saveState(); render(); renderDaily(); showToast(t('toastUpdated'));
+}
+
+const TASK_STATUS = ['inbox','backlog','ready','doing','waiting','done'];
+const TS_LABEL = { inbox:'tsInbox', backlog:'tsBacklog', ready:'tsReady', doing:'tsDoing', waiting:'tsWaiting', done:'tsDone' };
+const openProjects = new Set(); // keeps a project's task list expanded across re-renders
+function tasksHtml(p){
+  const items = state.items.filter(x => x.projectId === p.id)
+    .sort((a,b) => TASK_STATUS.indexOf(a.status) - TASK_STATUS.indexOf(b.status));
+  const open = items.filter(x => x.status !== 'done').length;
+  const rows = items.map(it => `<div class="task-row ${it.status}">
+      <select class="stage-select" onchange="setTaskStatus('${it.id}',this.value)">${TASK_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${t(TS_LABEL[s])}</option>`).join('')}</select>
+      <span>${escapeHtml(it.title)}</span>
+      <button class="chip" onclick="deleteItem('${it.id}')" aria-label="${t('chipDelete')}">×</button>
+    </div>`).join('');
+  return `<details class="card-tasks" ${openProjects.has(p.id)?'open':''} ontoggle="this.open ? openProjects.add('${p.id}') : openProjects.delete('${p.id}')">
+      <summary>${t('tasksSummary')} (${open}/${items.length})</summary>
+      ${rows}
+      <form class="task-add" onsubmit="addItem(event,'${p.id}')">
+        <input name="title" placeholder="${t('placeholderNewTask')}" aria-label="${t('placeholderNewTask')}">
+        <button class="chip">${t('btnAdd')}</button>
+      </form>
+    </details>`;
+}
+async function addItem(e, projectId){
+  e.preventDefault();
+  const title = e.target.elements.title.value.trim(); // form.title is the attribute, not the input
+  if(!title) return;
+  state.items.push({ id: uid(), projectId, title, status: 'inbox', updatedAt: Date.now() });
+  openProjects.add(projectId);
+  await saveState(); render(); showToast(t('toastAdded'));
+}
+async function setTaskStatus(id, status){
+  const it = state.items.find(x => x.id === id);
+  if(!it || !TASK_STATUS.includes(status)) return;
+  it.status = status; it.updatedAt = Date.now();
+  await saveState(); render(); showToast(t('toastUpdated'));
+}
+async function deleteItem(id){
+  state.items = state.items.filter(x => x.id !== id);
+  await saveState(); render(); showToast(t('toastDeleted'));
+}
+
 function cardHtml(task){
   const actions = [];
-  if(task.column !== 'active') actions.push(`<button class="chip" onclick="moveTask('${task.id}','active')">${t('chipResume')}</button>`);
-  if(task.column !== 'watch') actions.push(`<button class="chip" onclick="moveTask('${task.id}','watch')">${t('chipHold')}</button>`);
-  if(task.column !== 'archived') actions.push(`<button class="chip danger" onclick="moveTask('${task.id}','archived')">${t('chipArchive')}</button>`);
+  const lc = lifecycleOf(task);
+  actions.push(`<select class="stage-select" onchange="setLifecycle('${task.id}',this.value)">${Object.keys(LIFECYCLE).map(k => `<option value="${k}" ${k===lc?'selected':''}>${t(LC_LABEL[k])}</option>`).join('')}</select>`);
   actions.push(`<button class="chip" onclick="editTask('${task.id}')">${t('chipEdit')}</button>`);
   actions.push(`<button class="chip" onclick="deleteTask('${task.id}')">${t('chipDelete')}</button>`);
   return `<div class="card ${task.column}">
       <p class="card-title">${escapeHtml(task.title)}</p>
       ${task.notes ? `<p class="card-notes">${escapeHtml(task.notes)}</p>` : ''}
       <p class="card-meta">${t('metaUpdatedPrefix')}${fmtDate(task.updatedAt)}</p>
+      ${tasksHtml(task)}
       <div class="card-actions">${actions.join('')}</div>
     </div>`;
 }
@@ -1152,12 +1223,9 @@ function escapeHtml(s){
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-async function moveTask(id, col){
-  const task = state.tasks.find(x => x.id === id);
-  if(task){ task.column = col; task.updatedAt = Date.now(); await saveState(); render(); renderDaily(); showToast(t('toastUpdated')); }
-}
 async function deleteTask(id){
   state.tasks = state.tasks.filter(x => x.id !== id);
+  state.items = state.items.filter(x => x.projectId !== id);
   await saveState(); render(); renderDaily(); showToast(t('toastDeleted'));
 }
 let editingTaskId = null;
