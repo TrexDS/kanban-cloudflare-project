@@ -66,6 +66,19 @@
   .col-count{color:var(--sub); font-size:12.5px;}
   .col-desc{color:var(--sub); font-size:12px; margin:-4px 0 8px;}
   .task-project{font-size:11.5px; color:var(--sub); margin:0 0 6px;}
+  /* Dashboard figures. Task-status ramp: one green hue light→dark (todo→doing→done) + amber for waiting/blocked. */
+  :root{ --seg-todo:#9fcbb6; --seg-doing:#4f9a7c; --seg-waiting:#c7811f; --seg-done:#1f5f47; }
+  .kpi-row{display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin:14px 0 6px;}
+  .kpi{background:var(--card); border-radius:14px; padding:12px 14px; box-shadow:0 1px 2px rgba(0,0,0,0.05);}
+  .kpi-label{font-size:12px; color:var(--sub);}
+  .kpi-value{font-size:26px; font-weight:600; margin-top:2px;}
+  .kpi-value small{font-size:13px; font-weight:400; color:var(--sub); margin-left:2px;}
+  @media (max-width: 520px){ .kpi-row{grid-template-columns:repeat(2, minmax(0,1fr));} }
+  .seg-bar{display:flex; gap:2px; height:8px; margin:8px 0 2px; border-radius:4px; overflow:hidden; background:#eceae4;}
+  .seg-bar span{display:block; height:100%;}
+  .seg-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--sub); margin:-2px 0 8px;}
+  .seg-legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px;}
+  .seg-counts{font-size:12px; color:var(--sub);}
   .card{
     background:var(--card); border-radius:14px; padding:12px 14px; margin-bottom:10px;
     box-shadow:0 1px 2px rgba(0,0,0,0.05); border-left:4px solid transparent;
@@ -295,10 +308,12 @@
 
   <!-- DASHBOARD VIEW -->
   <div class="view" id="view-dash">
+    <div class="kpi-row" id="kpiRow"></div>
     <div id="budgetCards"></div>
     <div class="dash-section-title" id="dashWeeklyTitle">📊 近7天时间分布</div>
     <div id="weeklyBars"></div>
     <div class="dash-section-title" id="dashProgressTitle">🧭 项目推进</div>
+    <div class="seg-legend" id="segLegend"></div>
     <div id="projectProgress"></div>
     <div class="dash-section-title" id="dashDoneTitle">✅ 本周完成</div>
     <div id="doneList"></div>
@@ -386,7 +401,8 @@ const I18N = {
     farewellProgressSuffix: ' 进度', investedLabel: '已投入', budgetLabel: '预算',
     weeklyTitle: '📊 近7天时间分布', weeklyEmpty: '这周还没有打卡记录',
     funnelTitle: '🎯 求职漏斗',
-    progressTitle: '🧭 项目推进', progressEmpty: '没有进行中的项目', openTasks: '未完成', noTasksYet: '还没有任务',
+    kpiHours: '本周投入', kpiDoing: '进行中任务', kpiWaiting: '等待 / 受阻', kpiDone: '本周完成', segTodo: '待办',
+    progressTitle: '🧭 项目推进', progressEmpty: '没有进行中的项目', noTasksYet: '还没有任务',
     staleBadge: '⏸️ 14 天以上没动静', doneTitle: '✅ 本周完成', doneEmpty: '这周还没有完成的任务',
     modalTitle: '每周确认', modalContinue: '继续推进', modalHold: '先搁置', modalDone: '已完成 / 归档', modalSkip: '跳过这条',
     modalNotePlaceholder: '这周的进展 / 备注（可选，会追加到这条线程）',
@@ -444,7 +460,8 @@ const I18N = {
     farewellProgressSuffix: ' Progress', investedLabel: 'Invested', budgetLabel: 'Budget',
     weeklyTitle: '📊 Last 7 Days', weeklyEmpty: 'No check-ins logged this week',
     funnelTitle: '🎯 Job Funnel',
-    progressTitle: '🧭 Project Progress', progressEmpty: 'No projects in progress', openTasks: 'open', noTasksYet: 'No tasks yet',
+    kpiHours: 'Hours this week', kpiDoing: 'Tasks in progress', kpiWaiting: 'Waiting / blocked', kpiDone: 'Done this week', segTodo: 'To do',
+    progressTitle: '🧭 Project Progress', progressEmpty: 'No projects in progress', noTasksYet: 'No tasks yet',
     staleBadge: '⏸️ No activity for 14+ days', doneTitle: '✅ Done This Week', doneEmpty: 'Nothing finished this week yet',
     modalTitle: 'Weekly Check-in', modalContinue: 'Keep Going', modalHold: 'Put on Hold', modalDone: 'Done / Archive', modalSkip: 'Skip',
     modalNotePlaceholder: 'This week’s progress / notes (optional, appended to this thread)',
@@ -1556,8 +1573,24 @@ function renderDashboard(){
   barsEl.innerHTML = totals.length ? totals.sort((a,b)=>b.h-a.h).map(x => `
     <div class="bar-row">
       <div class="bar-label"><span>${escapeHtml(x.task.title)}${x.task.column === 'archived' ? ` <span class="sub" style="font-weight:400;">${t('tagArchived')}</span>` : ''}</span><span>${x.h}h</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(x.h/maxH*100)}%;"></div></div>
+      <div class="bar-track" title="${escapeHtml(x.task.title)}：${x.h}h"><div class="bar-fill" style="width:${(x.h/maxH*100)}%;"></div></div>
     </div>`).join('') : `<div class="empty">${t('weeklyEmpty')}</div>`;
+
+  // KPI row: the four numbers a weekly review starts from.
+  const cutoff7 = new Date(days[0] + 'T00:00:00').getTime();
+  const doneWeek = state.items.filter(x => x.status === 'done' && (x.updatedAt || 0) >= cutoff7);
+  const weekHours = state.tasks.reduce((sum, p) => sum + sumHoursForTask(p.id, days), 0);
+  const nWaiting = state.items.filter(x => x.status === 'waiting').length;
+  const kpi = (label, value, unit) => `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-value">${value}${unit ? `<small>${unit}</small>` : ''}</div></div>`;
+  document.getElementById('kpiRow').innerHTML =
+    kpi(t('kpiHours'), Math.round(weekHours * 10) / 10, 'h') +
+    kpi(t('kpiDoing'), state.items.filter(x => x.status === 'doing').length) +
+    kpi(t('kpiWaiting'), nWaiting ? `⚠️ ${nWaiting}` : 0) +
+    kpi(t('kpiDone'), doneWeek.length);
+
+  // Task status split per project: todo (inbox/backlog/ready) → doing → waiting → done.
+  const SEG = [['todo', t('segTodo'), ['inbox','backlog','ready']], ['doing', t('tsDoing'), ['doing']], ['waiting', t('tsWaiting'), ['waiting']], ['done', t('tsDone'), ['done']]];
+  document.getElementById('segLegend').innerHTML = SEG.map(([k, label]) => `<span><i style="background:var(--seg-${k})"></i>${label}</span>`).join('');
 
   // Project progress: exploring / active / maintaining projects with their open tasks.
   // Stale = neither a logged hour nor a task change in 14 days (editing the project itself doesn't count).
@@ -1569,8 +1602,11 @@ function renderDashboard(){
     const open = items.filter(x => x.status !== 'done');
     const lastLog = lastActiveDate(p.id);
     const lastTouch = Math.max(lastLog ? new Date(lastLog + 'T00:00:00').getTime() : 0, ...items.map(x => x.updatedAt || 0));
+    const segs = SEG.map(([k, label, sts]) => [k, label, items.filter(x => sts.includes(x.status)).length]).filter(x => x[2] > 0);
+    const summary = segs.map(([, label, n]) => `${label} ${n}`).join(' · ');
     return `<div class="card ${p.column}" style="padding:10px 14px;">
-      <div class="streak-row"><span style="font-weight:600;">${escapeHtml(p.title)} <span class="sub" style="font-weight:400;">· ${t(LC_LABEL[lifecycleOf(p)])}</span></span><span class="sub">${items.length ? `${t('openTasks')} ${open.length}` : t('noTasksYet')}</span></div>
+      <div class="streak-row"><span style="font-weight:600;">${escapeHtml(p.title)} <span class="sub" style="font-weight:400;">· ${t(LC_LABEL[lifecycleOf(p)])}</span></span><span class="seg-counts">${items.length ? summary : t('noTasksYet')}</span></div>
+      ${items.length ? `<div class="seg-bar" role="img" aria-label="${escapeHtml(summary)}">${segs.map(([k, label, n]) => `<span style="flex:${n}; background:var(--seg-${k})" title="${label}：${n}"></span>`).join('')}</div>` : ''}
       ${taskLine('doing', open.filter(x => x.status === 'doing'))}
       ${taskLine('waiting', open.filter(x => x.status === 'waiting'))}
       ${lastTouch < cutoff14 ? `<div class="stale-item" style="margin-top:4px;">${t('staleBadge')}</div>` : ''}
@@ -1578,8 +1614,7 @@ function renderDashboard(){
   }).join('') : `<div class="empty">${t('progressEmpty')}</div>`;
 
   // Done this week. shortcut: uses the task's updatedAt (set on every status change) as the finish time; add a doneAt field if tasks become editable after Done.
-  const cutoff7 = new Date(days[0] + 'T00:00:00').getTime();
-  const done = state.items.filter(x => x.status === 'done' && (x.updatedAt || 0) >= cutoff7).sort((a,b) => b.updatedAt - a.updatedAt);
+  const done = doneWeek.sort((a,b) => b.updatedAt - a.updatedAt);
   const projTitle = id => (state.tasks.find(p => p.id === id) || {}).title || '';
   document.getElementById('doneList').innerHTML = done.length ? `<div class="card active" style="padding:6px 14px;">` +
     done.map(x => `<div class="streak-row"><span>${escapeHtml(x.title)}</span><span class="sub">${escapeHtml(projTitle(x.projectId))}</span></div>`).join('') +
