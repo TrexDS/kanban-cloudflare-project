@@ -27,7 +27,8 @@ async function setLifecycle(id, lc){
   p.column = LIFECYCLE[lc];
   if(lc === 'exploring' || lc === 'maintaining') p.phase = lc; else delete p.phase;
   p.updatedAt = Date.now();
-  if(!await saveState()) return; render(); renderDaily(); renderDashboard(); showToast(t('toastUpdated'));
+  render(); renderDaily(); renderDashboard(); // update the screen now; a failed save re-renders from the cloud copy
+  if(await saveState()) showToast(t('toastUpdated'));
 }
 
 const TASK_STATUS = ['inbox','backlog','ready','doing','waiting','done'];
@@ -112,7 +113,8 @@ async function setTaskStatus(id, status){
   const it = state.items.find(x => x.id === id);
   if(!it || !TASK_STATUS.includes(status)) return;
   it.status = status; it.updatedAt = Date.now();
-  if(!await saveState()) return; render(); showToast(t('toastUpdated'));
+  render(); // optimistic, like setLifecycle
+  if(await saveState()) showToast(t('toastUpdated'));
 }
 async function deleteItem(id){
   const it = state.items.find(x => x.id === id);
