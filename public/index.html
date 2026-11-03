@@ -430,7 +430,7 @@ const I18N = {
     toastNeedThreadName: '请输入线程名称', toastNeedCompanyName: '请输入公司名称', toastNeedContactInfo: '请输入联系人信息',
     toastSaveFailed: '保存失败，请检查网络后重试', toastNoThreadsToCheck: '没有需要确认的线程', toastCheckinDone: '本周确认完成 ✅',
     pipelineIntro: '这里是随时更新的执行细节，不进每周确认流程。',
-    pipelineCompaniesTitle: '📋 公司 / 面试进度', btnAddCompany: '+ 新增公司',
+    pipelineCompaniesTitle: '📋 求职申请 / 面试进度', btnAddCompany: '+ 新增申请',
     placeholderCompanyName: '公司名称', placeholderCompanyNotes: '备注，例如下一步动作/截止日期',
     pipelineContactsTitle: '🤝 Cold Outreach / 人脉联系', btnAddContact: '+ 新增联系人',
     placeholderContactName: '姓名 / 公司 / 职位', placeholderNotes: '备注',
@@ -474,7 +474,8 @@ const I18N = {
     lcExploring: '探索中', lcActive: '推进中', lcOnHold: '搁置', lcMaintaining: '维护中', lcArchived: '已归档',
     lcExploringDesc: '还在试水，没决定要不要投入', lcActiveDesc: '当前主力投入', lcMaintainingDesc: '已成型，定期少量投入', lcOnHoldDesc: '暂停，以后可能恢复', lcArchivedDesc: '已结束',
     tsInbox: '收件箱', tsBacklog: '待排', tsReady: '可开始', tsDoing: '进行中', tsWaiting: '等待 / 受阻', tsDone: '完成',
-    tasksSummary: '任务', placeholderNewTask: '新任务…', btnAdd: '添加'
+    tasksSummary: '任务', placeholderNewTask: '新任务…', btnAdd: '添加',
+    appNoProject: '未关联 Project', appPickProject: '先关联一个 Project 再添加任务'
   },
   en: {
     appTitle: '🗂️ Multi-Thread Task Board', pageTitle: 'Multi-Thread Task Board',
@@ -492,7 +493,7 @@ const I18N = {
     toastNeedThreadName: 'Please enter a thread name', toastNeedCompanyName: 'Please enter a company name', toastNeedContactInfo: 'Please enter contact info',
     toastSaveFailed: 'Save failed, please check your connection', toastNoThreadsToCheck: 'No threads to check in on', toastCheckinDone: 'Weekly check-in complete ✅',
     pipelineIntro: 'Fine-grained progress you update anytime — not part of the weekly check-in flow.',
-    pipelineCompaniesTitle: '📋 Companies / Interview Progress', btnAddCompany: '+ Add Company',
+    pipelineCompaniesTitle: '📋 Applications / Interview Progress', btnAddCompany: '+ Add Application',
     placeholderCompanyName: 'Company name', placeholderCompanyNotes: 'Notes, e.g. next step / deadline',
     pipelineContactsTitle: '🤝 Cold Outreach / Contacts', btnAddContact: '+ Add Contact',
     placeholderContactName: 'Name / company / role', placeholderNotes: 'Notes',
@@ -536,7 +537,8 @@ const I18N = {
     lcExploring: 'Exploring', lcActive: 'Active', lcOnHold: 'On Hold', lcMaintaining: 'Maintaining', lcArchived: 'Archived',
     lcExploringDesc: 'Trying it out, not committed yet', lcActiveDesc: 'Main focus right now', lcMaintainingDesc: 'Established, light regular upkeep', lcOnHoldDesc: 'Paused, may resume later', lcArchivedDesc: 'Finished',
     tsInbox: 'Inbox', tsBacklog: 'Backlog', tsReady: 'Ready', tsDoing: 'In Progress', tsWaiting: 'Waiting / Blocked', tsDone: 'Done',
-    tasksSummary: 'Tasks', placeholderNewTask: 'New task…', btnAdd: 'Add'
+    tasksSummary: 'Tasks', placeholderNewTask: 'New task…', btnAdd: 'Add',
+    appNoProject: 'No project', appPickProject: 'Link a project to add tasks'
   }
 };
 function t(key){ return (I18N[LANG] && I18N[LANG][key] !== undefined) ? I18N[LANG][key] : (I18N.zh[key] !== undefined ? I18N.zh[key] : key); }
@@ -1249,7 +1251,7 @@ function render(){
       ${list.length ? list.map(cardHtml).join('') : `<div class="empty">${t('emptyNone')}</div>`}
     </div>`;
   }).join('');
-  renderTasks();
+  renderTasks(); renderPipeline();
   document.getElementById('lastCheckin').textContent = state.lastCheckin
     ? `${t('lastCheckinPrefix')}${fmtDate(state.lastCheckin)}` : t('neverCheckedIn');
 }
@@ -1274,15 +1276,18 @@ async function setLifecycle(id, lc){
 const TASK_STATUS = ['inbox','backlog','ready','doing','waiting','done'];
 const TS_LABEL = { inbox:'tsInbox', backlog:'tsBacklog', ready:'tsReady', doing:'tsDoing', waiting:'tsWaiting', done:'tsDone' };
 const openProjects = new Set(); // keeps a project's task list expanded across re-renders
+function taskRowHtml(it){
+  return `<div class="task-row ${it.status}">
+      <select class="stage-select" onchange="setTaskStatus('${it.id}',this.value)">${TASK_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${t(TS_LABEL[s])}</option>`).join('')}</select>
+      <span>${escapeHtml(it.title)}</span>
+      <button class="chip" onclick="deleteItem('${it.id}')" aria-label="${t('chipDelete')}">×</button>
+    </div>`;
+}
 function tasksHtml(p){
   const items = state.items.filter(x => x.projectId === p.id)
     .sort((a,b) => TASK_STATUS.indexOf(a.status) - TASK_STATUS.indexOf(b.status));
   const open = items.filter(x => x.status !== 'done').length;
-  const rows = items.map(it => `<div class="task-row ${it.status}">
-      <select class="stage-select" onchange="setTaskStatus('${it.id}',this.value)">${TASK_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${t(TS_LABEL[s])}</option>`).join('')}</select>
-      <span>${escapeHtml(it.title)}</span>
-      <button class="chip" onclick="deleteItem('${it.id}')" aria-label="${t('chipDelete')}">×</button>
-    </div>`).join('');
+  const rows = items.map(taskRowHtml).join('');
   return `<details class="card-tasks" ${openProjects.has(p.id)?'open':''} ontoggle="this.open ? openProjects.add('${p.id}') : openProjects.delete('${p.id}')">
       <summary>${t('tasksSummary')} (${open}/${items.length})</summary>
       ${rows}
@@ -1292,12 +1297,14 @@ function tasksHtml(p){
       </form>
     </details>`;
 }
-async function addItem(e, projectId){
+async function addItem(e, projectId, applicationId){
   e.preventDefault();
   const title = e.target.elements.title.value.trim(); // form.title is the attribute, not the input
   projectId = projectId || e.target.elements.project.value; // tasks tab picks the project in the form
   if(!title || !state.tasks.some(p => p.id === projectId)) return;
-  state.items.push({ id: uid(), projectId, title, status: 'inbox', updatedAt: Date.now() });
+  const item = { id: uid(), projectId, title, status: 'inbox', updatedAt: Date.now() };
+  if(applicationId) item.applicationId = applicationId; // Application lives in the pipeline doc; the link is kept on the task
+  state.items.push(item);
   e.target.elements.title.value = '';
   openProjects.add(projectId);
   await saveState(); render(); showToast(t('toastAdded'));
@@ -1328,7 +1335,7 @@ function renderTasks(){
       <div class="col-head"><span class="col-title">${t(TS_LABEL[st])}</span><span class="col-count">${list.length ? `(${list.length})` : ''}</span></div>
       ${list.length ? list.map(it => `<div class="card ${st==='done'?'archived':'active'}">
           <p class="card-title">${escapeHtml(it.title)}</p>
-          <p class="task-project">${escapeHtml(title(it.projectId))}</p>
+          <p class="task-project">${escapeHtml(title(it.projectId))}${appName(it.applicationId) ? ` · ${escapeHtml(appName(it.applicationId))}` : ''}</p>
           ${taskLogHtml(it)}
           <div class="card-actions">
             <select class="stage-select" onchange="setTaskStatus('${it.id}',this.value)">${TASK_STATUS.map(s => `<option value="${s}" ${s===it.status?'selected':''}>${t(TS_LABEL[s])}</option>`).join('')}</select>
@@ -1503,11 +1510,41 @@ function pipelineCardHtml(item, kind, options){
     <p class="card-title">${escapeHtml(item.name)}</p>
     ${item.notes ? `<p class="card-notes">${escapeHtml(item.notes)}</p>` : ''}
     <p class="card-meta">${t('metaUpdatedPrefix')}${fmtDate(item.updatedAt)}</p>
+    ${kind === 'company' ? appTasksHtml(item) : ''}
     <div class="card-actions">
       <select class="stage-select" onchange="updateStage('${kind}','${item.id}',this.value)">${opts}</select>
       <button class="chip" onclick="deletePipelineItem('${kind}','${item.id}')">${t('chipDelete')}</button>
     </div>
   </div>`;
+}
+function appName(id){ return id ? (pipeline.companies.find(a => a.id === id) || {}).name || '' : ''; }
+const openApps = new Set();
+// An Application (pipeline.companies entry) links to one Project and many Tasks (task.applicationId).
+function appTasksHtml(app){
+  const proj = state.tasks.find(p => p.id === app.projectId);
+  const items = state.items.filter(x => x.applicationId === app.id)
+    .sort((a,b) => TASK_STATUS.indexOf(a.status) - TASK_STATUS.indexOf(b.status));
+  const open = items.filter(x => x.status !== 'done').length;
+  const projSel = `<select class="stage-select" onchange="setAppProject('${app.id}',this.value)" aria-label="Project">
+      <option value="">${t('appNoProject')}</option>
+      ${state.tasks.filter(p => p.column !== 'archived' || p.id === app.projectId).map(p => `<option value="${p.id}" ${p.id===app.projectId?'selected':''}>${escapeHtml(p.title)}</option>`).join('')}
+    </select>`;
+  return `<details class="card-tasks" ${openApps.has(app.id)?'open':''} ontoggle="this.open ? openApps.add('${app.id}') : openApps.delete('${app.id}')">
+      <summary>${t('tasksSummary')} (${open}/${items.length})${proj ? ` · ${escapeHtml(proj.title)}` : ''}</summary>
+      <div class="card-actions" style="margin:6px 0;">${projSel}</div>
+      ${items.map(taskRowHtml).join('')}
+      ${proj ? `<form class="task-add" onsubmit="addItem(event,'${proj.id}','${app.id}')">
+        <input name="title" placeholder="${t('placeholderNewTask')}" aria-label="${t('placeholderNewTask')}">
+        <button class="chip">${t('btnAdd')}</button>
+      </form>` : `<p class="sub" style="font-size:12px;">${t('appPickProject')}</p>`}
+    </details>`;
+}
+async function setAppProject(id, projectId){
+  const app = pipeline.companies.find(a => a.id === id);
+  if(!app) return;
+  app.projectId = projectId || undefined; app.updatedAt = Date.now();
+  openApps.add(id);
+  await savePipeline(); renderPipeline(); showToast(t('toastUpdated'));
 }
 function renderPipeline(){
   renderFunnel();
