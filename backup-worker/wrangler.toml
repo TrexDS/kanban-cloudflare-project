@@ -1,0 +1,17 @@
+name = "mori-kv-backup"
+main = "index.js"
+compatibility_date = "2026-08-22"
+workers_dev = false
+preview_urls = false
+
+# 17:00 UTC = 03:00/04:00 Melbourne
+[triggers]
+crons = ["0 17 * * *"]
+
+[[kv_namespaces]]
+binding = "SOURCE"
+id = "38fe44dba6834447baa6dbf88f6f34a9"
+
+[[kv_namespaces]]
+binding = "BACKUPS"
+id = "bfc7bd4fbc75481a916a26f93857567e"
