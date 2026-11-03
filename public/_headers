@@ -1,0 +1,6 @@
+# The zone's Browser Cache TTL raises Pages' max-age=0 to 4h for /js and /css, so a fresh index.html
+# could run against yesterday's scripts. no-cache = always revalidate (304 when unchanged).
+/js/*
+  Cache-Control: no-cache
+/css/*
+  Cache-Control: no-cache
