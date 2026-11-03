@@ -180,12 +180,12 @@ function renderOuraSleep(){
 
   // last 7 nights, stacked vertical bars in hours (time in bed), same stage order bottom = deep
   const week = nights.slice(-7).map(r => ({ r, ...stagesOf(r) }));
-  const maxH = Math.max(9, Math.ceil(Math.max(...week.map(x => x.bed)) / 60));
+  const maxH = Math.max(9, Math.ceil(Math.max(...week.map(x => x.asleep)) / 60)); // bars = time asleep (awake only in the tooltip), so height matches the label
   const H = 140, toPx = m => m / 60 / maxH * H;
   const avgWeek = average(week.map(x => x.asleep));
   const bars = week.map(x => {
     const tip = `${md(x.r['Date'])} · ${t('asleepLabel')} ${fmtMin(x.asleep)}` + STAGES.map(([k]) => `\n${t('stage_' + k)}  ${fmtMin(x.s[k])}`).join('');
-    const stack = STAGES.map(([k]) => x.s[k] ? `<span style="height:${toPx(x.s[k]).toFixed(1)}px; background:var(--sleep-${k})"></span>` : '').join('');
+    const stack = STAGES.filter(([k]) => k !== 'awake').map(([k]) => x.s[k] ? `<span style="height:${toPx(x.s[k]).toFixed(1)}px; background:var(--sleep-${k})"></span>` : '').join('');
     return `<div class="sl-col" tabindex="0" data-tip="${escapeHtml(tip)}"><div class="sl-val">${fmtMin(x.asleep)}</div><div class="sl-stack">${stack}</div></div>`;
   }).join('');
   const grid = [4, 8].map(h => `<div class="sl-grid" style="bottom:${(h / maxH * H).toFixed(1)}px"><span>${h}h</span></div>`).join('');
