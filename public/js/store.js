@@ -125,7 +125,7 @@ async function loadState(){
 function showSeedConfirmBanner(){
   const bar = document.createElement('div');
   bar.id = 'seedConfirmBanner';
-  bar.style.cssText = 'position:sticky; top:0; z-index:50; background:#fff3cd; border-bottom:1px solid #ffe08a; padding:10px 14px; font-size:13.5px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
+  bar.style.cssText = 'position:sticky; top:0; z-index:50; background:var(--warn-bg); border-bottom:1px solid #efd3cf; padding:10px 14px; font-size:13.5px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
   bar.innerHTML = `<span>⚠️ 云端看板数据是空的——如果这不是你第一次用，先别急着操作，可能是数据异常，建议先联系确认原因。下面显示的是一套示例任务，尚未保存。</span>
     <button class="chip btn-sm" onclick="confirmUseSeedTasks()">确认用这套开始（会保存）</button>`;
   document.body.prepend(bar);

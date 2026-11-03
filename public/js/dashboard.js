@@ -218,11 +218,11 @@ function renderAccumulated(totals, order, colorOf){
   const path = k => series[k].map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
   const xIdx = [0, Math.floor((days.length - 1) / 2), days.length - 1].filter((v, i, a) => a.indexOf(v) === i);
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${t('accTitle')}: ${keys.map(k => `${name(k)} ${series[k][series[k].length-1]}h`).join(', ')}">
-    ${ticks.map(v => `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e3db"/><text x="${L-6}" y="${y(v)+3}" text-anchor="end">${v}h</text>`).join('')}
+    ${ticks.map(v => `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+3}" text-anchor="end">${v}h</text>`).join('')}
     ${xIdx.map(i => `<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?'start':i===days.length-1?'end':'middle'}">${days[i].slice(5).replace('-','/')}</text>`).join('')}
     ${accMode === 'total' ? `<path d="${path('total')}L${x(days.length-1)},${y(0)}L${x(0)},${y(0)}Z" fill="var(--active)" opacity="0.14"/>` : ''}
     ${keys.map(k => `<path d="${path(k)}" fill="none" stroke="${color(k)}" stroke-width="2" stroke-linejoin="round"/>`).join('')}
-    <line id="accCross" y1="${T}" y2="${H-B}" stroke="#8a8578" stroke-dasharray="3 3" style="display:none"/>
+    <line id="accCross" y1="${T}" y2="${H-B}" stroke="#7f8a92" stroke-dasharray="3 3" style="display:none"/>
     ${keys.map(k => `<circle class="acc-dot" data-k="${k}" r="4" fill="${color(k)}" stroke="#fff" stroke-width="2" style="display:none"/>`).join('')}
     <rect x="${L}" y="0" width="${W-L-R}" height="${H}" fill="transparent" id="accHit"/>
   </svg>`;

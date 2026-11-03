@@ -89,8 +89,8 @@ function scoreBand(v){
 }
 function bandStyle(v){
   if(v >= 70) return 'background:var(--active-bg); color:var(--active); border-color:transparent; font-weight:600;';
-  if(v >= 60) return 'background:var(--watch-bg); color:var(--watch); border-color:transparent; font-weight:600;';
-  return 'background:#f7e3dd; color:var(--accent); border-color:transparent; font-weight:600;';
+  if(v >= 60) return 'background:var(--watch-bg); color:#555a92; border-color:transparent; font-weight:600;';
+  return 'background:var(--warn-bg); color:var(--warn-ink); border-color:transparent; font-weight:600;';
 }
 function average(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
 function stddev(arr){
@@ -161,6 +161,9 @@ function timingOf(r){
   const wake = clockMin(r['Bedtime End']);
   return { start, len: ph.length * 5, wake: wake !== null && wake > start ? wake : start + ph.length * 5, runs };
 }
+// Weekly bars only: fold stretches under 15 min into the one before, so each night reads as a few phases, not a barcode
+// (the last-night timeline and all totals keep the full 5-minute detail).
+function mergeShort(runs){ const out = []; runs.forEach(x => { const l = out[out.length - 1]; if(l && (x.n * 5 < 15 || l.k === x.k)) l.n += x.n; else out.push({ ...x }); }); return out; }
 // Last night as a timeline: one lane per stage, a block for every stretch spent in it.
 function hypnogramHtml(tm){
   const pct = m => (m / tm.len * 100).toFixed(2) + '%';
@@ -203,7 +206,7 @@ function renderOuraSleep(){
   const H = 180, px = m => (m / (hi - lo) * H).toFixed(1);
   const bars = week.map(x => {
     const tip = `${mdStr(x.r['Date'])} · ${t('asleepLabel')} ${fmtMin(x.asleep)}` + (x.tm ? `\n${hhmm(x.tm.start)} → ${hhmm(x.tm.wake)}` : '') + STAGES.map(([k]) => `\n${t('stage_' + k)}  ${fmtMin(x.s[k])}`).join('');
-    const bar = x.tm ? `<div class="fl-bar" style="top:${px(x.tm.start - lo)}px">${x.tm.runs.map(r => `<span style="height:${px(r.n * 5)}px; background:var(--sleep-${r.k})"></span>`).join('')}</div>
+    const bar = x.tm ? `<div class="fl-bar" style="top:${px(x.tm.start - lo)}px">${mergeShort(x.tm.runs).map(r => `<span style="height:${px(r.n * 5)}px; background:var(--sleep-${r.k})"></span>`).join('')}</div>
       ${dense ? '' : `<div class="sl-val fl-val" style="top:${(px(x.tm.start - lo) - 15)}px">${fmtMin(x.asleep)}</div>`}` : '';
     return `<div class="fl-col" tabindex="0" data-tip="${escapeHtml(tip)}">${bar}</div>`;
   }).join('');
@@ -219,8 +222,8 @@ function renderOuraSleep(){
     <div class="ring-wrap">
       <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${STAGES.map(([k]) => `${t('stage_' + k)} ${fmtMin(s[k])}`).join(', ')}">
         ${segs}
-        <text x="${c}" y="${c - 4}" text-anchor="middle" font-size="19" font-weight="700" fill="#2b2b2b">${fmtMin(asleep)}</text>
-        <text x="${c}" y="${c + 16}" text-anchor="middle" font-size="11" fill="#8a8578">${t('inBedLabel')} ${fmtMin(bed)}</text>
+        <text x="${c}" y="${c - 4}" text-anchor="middle" font-size="19" font-weight="700" fill="#22323d">${fmtMin(asleep)}</text>
+        <text x="${c}" y="${c + 16}" text-anchor="middle" font-size="11" fill="#7f8a92">${t('inBedLabel')} ${fmtMin(bed)}</text>
       </svg>
       <div class="ring-legend">${legend}
         <div class="sub" style="margin-top:6px;">${t('efficiencyLabel')} ${num(last['Sleep Efficiency']) ?? '–'}% · ${t('latencyLabel')} ${fmtMin(num(last['Sleep Latency (min)']))}</div>
@@ -274,10 +277,10 @@ function sparkSVG(vals, u, worse, fmt){
   const last = vals[vals.length - 1];
   return `<svg class="vital-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${vals.length}">
     <rect x="0" y="${Y(u.hi).toFixed(1)}" width="${W}" height="${(Y(u.lo) - Y(u.hi)).toFixed(1)}" fill="var(--active-bg)"/>
-    <polyline points="${pts}" fill="none" stroke="#9c978b" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    <polyline points="${pts}" fill="none" stroke="#a3adb4" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
     ${vals.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.x).toFixed(1)}" r="9" fill="transparent" data-tip="${mdStr(p.d)} · ${fmt(p.x)}"/>`).join('')}
     <line x1="${X(vals.length - 1).toFixed(1)}" y1="${Y(last.x).toFixed(1)}" x2="${X(vals.length - 1).toFixed(1)}" y2="${Y(last.x).toFixed(1)}" stroke="#fff" stroke-width="12" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-    <line x1="${X(vals.length - 1).toFixed(1)}" y1="${Y(last.x).toFixed(1)}" x2="${X(vals.length - 1).toFixed(1)}" y2="${Y(last.x).toFixed(1)}" stroke="${worse ? 'var(--watch)' : 'var(--active)'}" stroke-width="9" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <line x1="${X(vals.length - 1).toFixed(1)}" y1="${Y(last.x).toFixed(1)}" x2="${X(vals.length - 1).toFixed(1)}" y2="${Y(last.x).toFixed(1)}" stroke="${worse ? 'var(--warn)' : 'var(--active)'}" stroke-width="9" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
   </svg>`;
 }
 // Where last night sits against the general benchmark: a bar with the benchmark zone and your value.
@@ -328,8 +331,8 @@ function ringSVG(pct, size, color, label){
     <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-opacity="0.16" stroke-width="10"/>
     <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="10"
       stroke-dasharray="${dash} ${circumference}" stroke-linecap="round" transform="rotate(-90 ${size/2} ${size/2})"/>
-    <text x="${size/2}" y="${size/2 - 4}" font-size="15" font-weight="700" fill="#2b2b2b" text-anchor="middle">${Math.round(pct)}%</text>
-    <text x="${size/2}" y="${size/2 + 14}" font-size="10" fill="#8a8578" text-anchor="middle">${escapeHtml(label)}</text>
+    <text x="${size/2}" y="${size/2 - 4}" font-size="15" font-weight="700" fill="#22323d" text-anchor="middle">${Math.round(pct)}%</text>
+    <text x="${size/2}" y="${size/2 + 14}" font-size="10" fill="#7f8a92" text-anchor="middle">${escapeHtml(label)}</text>
   </svg>`;
 }
 function renderOuraActivity(){
@@ -418,7 +421,7 @@ function renderHealthAlerts(){
   const list = ouraStatus === 'ok' ? healthAlerts() : [];
   document.getElementById('healthAlerts').innerHTML = list.length ? `<div class="health-alerts">
     <div class="attn-head">${t('alertsTitle')} (${list.length})</div>
-    ${list.map(([lvl, txt]) => `<div class="health-alert ${lvl}">${lvl === 'bad' ? '🔴' : '🟠'} ${escapeHtml(txt)}</div>`).join('')}</div>` : '';
+    ${list.map(([lvl, txt]) => `<div class="health-alert ${lvl}"><i class="alert-dot ${lvl}"></i>${escapeHtml(txt)}</div>`).join('')}</div>` : '';
 }
 
 /* ---- Stress vs recovery (Oura daytime stress) ---- */

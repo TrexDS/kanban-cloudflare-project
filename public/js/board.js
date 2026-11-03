@@ -94,7 +94,7 @@ function renderTasks(){
     const list = items.filter(x => x.status === st);
     return `<div class="col">
       <div class="col-head"><span class="col-title">${t(TS_LABEL[st])}</span><span class="col-count">${list.length ? `(${list.length})` : ''}</span></div>
-      ${list.length ? list.map(it => `<div class="card ${st==='done'?'archived':'active'}">
+      ${list.length ? list.map(it => `<div class="card ts-${st}">
           <p class="card-title">${escapeHtml(it.title)}</p>
           <p class="task-project">${escapeHtml(title(it.projectId))}${appName(it.applicationId) ? ` · ${escapeHtml(appName(it.applicationId))}` : ''}</p>
           ${taskLogHtml(it)}

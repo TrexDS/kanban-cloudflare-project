@@ -108,7 +108,7 @@
   <!-- DAILY LOG VIEW -->
   <div class="view" id="view-daily">
     <div style="display:flex; align-items:center; gap:10px; margin:14px 0 4px; flex-wrap:wrap;">
-      <input type="date" id="dailyDatePicker" onchange="changeDailyDate(this.value)" style="font-size:13.5px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-family:inherit;">
+      <input type="date" id="dailyDatePicker" onchange="changeDailyDate(this.value)" style="font-size:13.5px; padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; font-family:inherit;">
       <button class="chip btn-sm" onclick="changeDailyDate(todayStr(0))">回到今天</button>
     </div>
     <p class="sub" style="margin:6px 0 0;" id="dailyDateLabel"></p>
@@ -135,7 +135,7 @@
       </div>
       <div class="dash-side">
         <section class="panel">
-          <div class="dash-section-title" id="healthOverviewTitle">⭕ 今日状态</div>
+          <div class="dash-section-title" id="healthOverviewTitle">◐ 今日状态</div>
           <div id="ouraOverviewCard">加载中…</div>
         </section>
         <section class="panel">
