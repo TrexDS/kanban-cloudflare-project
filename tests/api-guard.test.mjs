@@ -108,6 +108,11 @@ test('stale rev gets 409 and does not overwrite', async () => {
   assert.equal(await r.text(), '{"v":"b"}');
   assert.equal(r.headers.get('ETag'), '"2"');
 });
+test('weak ETag from the edge (W/"n") is accepted as If-Match', async () => {
+  const DB = d1({ 'thread-kanban-data': '{}' });
+  assert.equal((await put('thread-kanban-data', '{"v":1}', DB, 'W/"1"')).status, 200);
+  assert.equal((await put('thread-kanban-data', '{"v":2}', DB, 'W/"1"')).status, 409);
+});
 test('concurrent writers on the same rev: exactly one wins', async () => {
   const DB = d1({ 'thread-kanban-data': '{}' });
   const res = await Promise.all([...Array(10)].map((_, i) => put('thread-kanban-data', `{"i":${i}}`, DB, '"1"')));

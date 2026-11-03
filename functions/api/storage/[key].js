@@ -19,7 +19,8 @@ export async function onRequestPut(context) {
   const key = context.params.key;
   if (!ALLOWED_KEYS.has(key)) return new Response('unknown key', { status: 404 });
   // Clients that don't send the rev they loaded (e.g. a stale cached page) must reload.
-  const base = /^"?(\d+)"?$/.exec(context.request.headers.get('If-Match') || '')?.[1];
+  // The edge marks ETags weak (W/"3") when it compresses the response, so accept that form too.
+  const base = /^(?:W\/)?"?(\d+)"?$/.exec(context.request.headers.get('If-Match') || '')?.[1];
   if (base === undefined) return new Response('If-Match required; reload the page', { status: 428 });
   const body = await context.request.text();
   if (new TextEncoder().encode(body).length > MAX_BYTES) return new Response('too large', { status: 413 });
