@@ -6,3 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 [[kv_namespaces]]
 binding = "KANBAN_KV"
 id = "38fe44dba6834447baa6dbf88f6f34a9"
+
+# Preview deployments use an isolated copy (restored from backup), never production data.
+[[env.preview.kv_namespaces]]
+binding = "KANBAN_KV"
+id = "6871001a963c43baa8f14c7b5426aecb"
