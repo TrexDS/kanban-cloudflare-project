@@ -340,25 +340,26 @@ function renderOuraActivity(){
   const el = document.getElementById('ouraActivityCard');
   const days = ouraRows.filter(r => num(r['Steps']) !== null);
   if(!days.length){ el.innerHTML = `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`; return; }
-  const row = days[days.length - 1];
-  const steps = num(row['Steps']) || 0, activeCal = num(row['Active Calories']) || 0;
-  const week = days.slice(-7), maxS = Math.max(STEP_GOAL, ...week.map(r => num(r['Steps']) || 0)), H = 90;
+  // follows the 7/30/90 switch: rings show the daily average over the window, bars show every day in it
+  const week = days.slice(-healthRange), dense = week.length > 10, every = Math.ceil(week.length / 8);
+  const steps = Math.round(average(week.map(r => num(r['Steps']) || 0))), activeCal = Math.round(average(week.map(r => num(r['Active Calories']) || 0)));
+  const maxS = Math.max(STEP_GOAL, ...week.map(r => num(r['Steps']) || 0)), H = 90;
   const hit = week.filter(r => (num(r['Steps']) || 0) >= STEP_GOAL).length;
   el.innerHTML = `
-    <div class="sub" style="margin-bottom:6px;">${mdStr(row['Date'])}</div>
+    <div class="sub" style="margin-bottom:6px;">${t('dailyAvgOver').replace('{n}', week.length)}</div>
     <div style="display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap; gap:12px;">
       <div style="text-align:center;">${ringSVG(steps / STEP_GOAL * 100, 110, 'var(--ring-activity)', t('goalPrefix') + STEP_GOAL)}
         <div class="card-meta" style="margin-top:4px;">${steps.toLocaleString()}${t('stepsSuffix')}</div></div>
       <div style="text-align:center;">${ringSVG(activeCal / ACTIVE_CAL_GOAL * 100, 110, 'var(--ring-activity)', t('activeCalLabel'))}
         <div class="card-meta" style="margin-top:4px;">${activeCal} / ${ACTIVE_CAL_GOAL} kcal</div></div>
     </div>
-    <div class="health-sub-title">${t('steps7d')}<span class="sub"> · ${t('goalHitDays').replace('{n}', hit).replace('{m}', week.length)}</span></div>
+    <div class="health-sub-title">${t('stepsNd').replace('{n}', week.length)}<span class="sub"> · ${t('goalHitDays').replace('{n}', hit).replace('{m}', week.length)}</span></div>
     <div class="sl-chart" style="height:${H + 18}px">
       <div class="sl-grid goal" style="bottom:${(STEP_GOAL / maxS * H).toFixed(1)}px"><span>${STEP_GOAL}</span></div>
-      <div class="sl-cols">${week.map(r => { const v = num(r['Steps']) || 0; return `<div class="sl-col" tabindex="0" data-tip="${mdStr(r['Date'])} · ${v.toLocaleString()}${t('stepsSuffix')}">
+      <div class="sl-cols${dense ? ' dense' : ''}">${week.map(r => { const v = num(r['Steps']) || 0; return `<div class="sl-col" tabindex="0" data-tip="${mdStr(r['Date'])} · ${v.toLocaleString()}${t('stepsSuffix')}">
         <div class="sl-stack"><span style="height:${Math.max(2, v / maxS * H).toFixed(1)}px; background:var(--ring-activity)"></span></div></div>`; }).join('')}</div>
     </div>
-    <div class="sl-labels">${week.map(r => `<span>${mdStr(r['Date'])}</span>`).join('')}</div>`;
+    <div class="sl-labels${dense ? ' dense' : ''}">${week.map((r, i) => `<span>${(week.length - 1 - i) % every ? '' : mdStr(r['Date'])}</span>`).join('')}</div>`;
 }
 
 /* ---- Page status: read failure / data freshness, range switch, tab badge ---- */
@@ -382,7 +383,7 @@ function renderHealthStatus(){
 }
 function setHealthRange(n){
   healthRange = n; try{ localStorage.setItem('health-range', n); }catch(e){}
-  renderHealthStatus(); renderOuraSleep(); renderOuraVitals(); renderStressRecovery();
+  renderHealthStatus(); renderOuraSleep(); renderOuraVitals(); renderStressRecovery(); renderOuraActivity();
 }
 // "Last N vs the N before" — only when the earlier window is at least half full, otherwise say nothing.
 function trendLine(xs, fmt){
