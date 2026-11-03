@@ -432,16 +432,16 @@ function stressRows(){
 function renderStressRecovery(){
   const el = document.getElementById('ouraStressCard'), rows = stressRows();
   if(!rows.length){ el.innerHTML = `<div class="empty">${t(ouraStatus === 'failed' ? 'ouraCardFailed' : 'ouraNoData')}</div>`; return; }
-  const last = rows[rows.length - 1], tot = last.st + last.rc || 1;
-  const verdict = last.st >= 2 * last.rc && last.st >= 60 ? 'stressHeavy' : last.rc >= last.st ? 'stressBalanced' : 'stressMild';
+  // verdict + split bar follow the 7/30/90 switch: totals over the chosen window, not just the latest day
   const win = rows.slice(-healthRange), dense = win.length > 10, every = Math.ceil(win.length / 8);
   const max = Math.max(60, ...win.map(x => Math.max(x.st, x.rc))), H = 54;
-  const sum = k => win.reduce((a, x) => a + x[k], 0);
+  const sum = k => win.reduce((a, x) => a + x[k], 0), st = sum('st'), rc = sum('rc'), days = win.length;
+  const verdict = st >= 2 * rc && st >= 60 * days ? 'stressHeavy' : rc >= st ? 'stressBalanced' : 'stressMild';
   el.innerHTML = `
     <div class="health-verdict">${t(verdict)}</div>
-    <div class="sr-split"><span style="flex:${last.st || 0.001}; background:var(--stress)"></span><span style="flex:${last.rc || 0.001}; background:var(--recovery)"></span></div>
-    <div class="sr-legend"><span><i style="background:var(--stress)"></i>${t('stressLabel')} <b>${fmtMin(last.st)}</b></span><span><i style="background:var(--recovery)"></i>${t('recoveryLabel')} <b>${fmtMin(last.rc)}</b></span><span class="sub">${mdStr(last.d)}</span></div>
-    <div class="health-sub-title">${t('lastNDays').replace('{n}', win.length)}<span class="sub"> · ${t('stressTotals').replace('{s}', fmtMin(sum('st'))).replace('{r}', fmtMin(sum('rc')))}</span></div>
+    <div class="sr-split"><span style="flex:${st || 0.001}; background:var(--stress)"></span><span style="flex:${rc || 0.001}; background:var(--recovery)"></span></div>
+    <div class="sr-legend"><span><i style="background:var(--stress)"></i>${t('stressLabel')} <b>${fmtMin(st)}</b> <span class="sub">${t('perDay').replace('{v}', fmtMin(st / days))}</span></span><span><i style="background:var(--recovery)"></i>${t('recoveryLabel')} <b>${fmtMin(rc)}</b> <span class="sub">${t('perDay').replace('{v}', fmtMin(rc / days))}</span></span><span class="sub">${t('lastNDays').replace('{n}', days)}</span></div>
+    <div class="health-sub-title">${t('dayByDay')}</div>
     <div class="sr-chart${dense ? ' dense' : ''}">${win.map(x => `<div class="sr-col" tabindex="0" data-tip="${mdStr(x.d)}\n${t('stressLabel')} ${fmtMin(x.st)}\n${t('recoveryLabel')} ${fmtMin(x.rc)}">
       <div class="sr-up"><span style="height:${(x.st / max * H).toFixed(1)}px"></span></div><div class="sr-down"><span style="height:${(x.rc / max * H).toFixed(1)}px"></span></div></div>`).join('')}</div>
     <div class="sl-labels${dense ? ' dense' : ''}">${win.map((x, i) => `<span>${(win.length - 1 - i) % every ? '' : mdStr(x.d)}</span>`).join('')}</div>
