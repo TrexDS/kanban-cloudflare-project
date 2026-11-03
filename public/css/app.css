@@ -308,3 +308,5 @@
   .card-title[draggable="true"]{cursor:grab;}
   .task-edit{display:flex; flex-direction:column; gap:6px;}
   .task-edit input{border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-family:inherit; font-size:13px;}
+  .col.drop-target{outline:2px dashed var(--active); outline-offset:-2px; background:var(--active-bg);}
+  .card.is-dragging{opacity:.45;}

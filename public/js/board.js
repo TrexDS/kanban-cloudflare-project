@@ -96,7 +96,7 @@ function renderTasks(){
     return `<div class="col" ondragover="dragOver(event)" ondrop="dropOn(event,'ts','${st}')">
       <div class="col-head"><span class="col-title">${t(TS_LABEL[st])}</span><span class="col-count">${list.length ? `(${list.length})` : ''}</span></div>
       ${list.length ? list.map(it => it.id === editingItemId ? taskEditHtml(it) : `<div class="card ts-${st}">
-          <p class="card-title" draggable="true" ondragstart="dragStart(event,'ts','${it.id}')" ondragend="dragging=null">${escapeHtml(it.title)}</p>
+          <p class="card-title" draggable="true" ondragstart="dragStart(event,'ts','${it.id}')" ondragend="dragEnd()">${escapeHtml(it.title)}</p>
           <p class="task-project">${escapeHtml(title(it.projectId))}${appName(it.applicationId) ? ` · ${escapeHtml(appName(it.applicationId))}` : ''}</p>
           ${it.note ? `<p class="card-notes">${escapeHtml(it.note)}</p>` : ''}
           ${taskLogHtml(it)}
@@ -155,11 +155,17 @@ async function saveItemEdit(e, id){
 
 // Drag a card by its title onto another column. Native HTML5 drag: no touch support, the dropdowns stay for phones.
 let dragging = null;
-function dragStart(e, kind, id){ dragging = { kind, id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); }
-function dragOver(e){ if(dragging) e.preventDefault(); }
+function dragStart(e, kind, id){
+  dragging = { kind, id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id);
+  e.target.closest('.card').classList.add('is-dragging');
+}
+// Highlight only the column under the pointer (dragleave fires on every child, so clear the others instead).
+function markDropCol(col){ document.querySelectorAll('.col.drop-target').forEach(c => c !== col && c.classList.remove('drop-target')); if(col) col.classList.add('drop-target'); }
+function dragOver(e){ if(dragging){ e.preventDefault(); markDropCol(e.currentTarget); } }
+function dragEnd(){ dragging = null; markDropCol(null); document.querySelectorAll('.is-dragging').forEach(c => c.classList.remove('is-dragging')); }
 function dropOn(e, kind, value){
   e.preventDefault();
-  const d = dragging; dragging = null;
+  const d = dragging; dragEnd();
   if(!d || d.kind !== kind) return;
   if(kind === 'lc'){
     const p = state.tasks.find(x => x.id === d.id);
@@ -177,7 +183,7 @@ function cardHtml(task){
   actions.push(`<button class="chip" onclick="editTask('${task.id}')">${t('chipEdit')}</button>`);
   actions.push(`<button class="chip" onclick="deleteTask('${task.id}')">${t('chipDelete')}</button>`);
   return `<div class="card ${task.column}">
-      <p class="card-title" draggable="true" ondragstart="dragStart(event,'lc','${task.id}')" ondragend="dragging=null">${escapeHtml(task.title)}</p>
+      <p class="card-title" draggable="true" ondragstart="dragStart(event,'lc','${task.id}')" ondragend="dragEnd()">${escapeHtml(task.title)}</p>
       ${task.notes ? `<p class="card-notes">${escapeHtml(task.notes)}</p>` : ''}
       <p class="card-meta">${t('metaUpdatedPrefix')}${fmtDate(task.updatedAt)}</p>
       ${tasksHtml(task)}
