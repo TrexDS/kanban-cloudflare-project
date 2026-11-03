@@ -80,7 +80,8 @@ function latestRowWithFields(fields){
   return null;
 }
 
-// Oura's own published score bands, so a bare number doesn't leave the reader guessing "is 66 good?"
+// Oura's published score bands: 85–100 Optimal, 70–84 Good, 60–69 Fair, 0–59 Pay attention
+// (https://support.ouraring.com/hc/en-us/articles/360057791533)
 function scoreBand(v){
   if(v >= 85) return t('bandOptimal');
   if(v >= 70) return t('bandGood');
@@ -119,13 +120,12 @@ function renderOuraOverview(){
         stroke-dasharray="${len * Math.min(v, 100) / 100} ${len}" transform="rotate(-90 ${c} ${c})" data-tip="${t(key)} ${v}"/>`;
   }).join('');
   const ready = num(row['Readiness Score']) ?? 0;
-  const verdict = ready >= 85 ? 'readyGreat' : ready >= 70 ? 'readyGood' : ready >= 60 ? 'readyFair' : 'readyLow';
   const resilience = (row['Resilience Level'] || '').trim().toLowerCase();
   const day = (row['Day Summary'] || '').trim().toLowerCase();
   const chips = [day && t('day_' + day) !== 'day_' + day ? t('daySummaryPrefix') + t('day_' + day) : '',
                  resilience ? t('resiliencePrefix') + (resilienceLabel(resilience) || resilience) : ''].filter(Boolean);
   el.innerHTML = `
-    <div class="health-verdict">${t(verdict)}</div>
+    <div class="health-verdict">${t('readyVerdict').replace('{v}', ready).replace('{band}', scoreBand(ready))}</div>
     <div class="ring-wrap">
       <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${RINGS.map(([f, k]) => `${t(k)} ${row[f]}`).join(', ')}">${rings}</svg>
       <div class="ring-legend">
@@ -215,7 +215,7 @@ function renderOuraSleep(){
   // schedule regularity: average bed / wake time and how much bedtime moves around
   const sched = timed.length >= 3 ? (() => {
     const st = timed.map(x => x.tm.start), sd = Math.round(stddev(st));
-    return `<div class="trend-line">${t('scheduleLine').replace('{b}', hhmm(average(st))).replace('{w}', hhmm(average(timed.map(x => x.tm.wake)))).replace('{sd}', fmtMin(sd))}${sd > 60 ? ` · <span class="vital-warn">${t('scheduleIrregular')}</span>` : ''}</div>`;
+    return `<div class="trend-line">${t('scheduleLine').replace('{b}', hhmm(average(st))).replace('{w}', hhmm(average(timed.map(x => x.tm.wake)))).replace('{sd}', fmtMin(sd))}</div>`;
   })() : '';
 
   el.innerHTML = `
@@ -400,7 +400,7 @@ function healthAlerts(){
   const out = [], F = {}; VITALS.forEach(v => F[v.key] = vitalFlags(v));
   const latest = ouraRows.length ? ouraRows[ouraRows.length - 1]['Date'] : null;
   const off = [['vHrv', -1], ['vRhr', 1], ['vTemp', 1], ['vBreath', 1]].filter(([k, d]) => { const f = F[k][F[k].length - 1]; return f && f.d === latest && f.dir === d; });
-  if(off.length >= 2) out.push(['bad', t('alertCombo').replace('{list}', off.map(([k]) => t(k)).join(t('listSep')))]);
+  if(off.length >= 2) out.push(['bad', t('alertCombo').replace('{k}', off.length).replace('{list}', off.map(([k, d]) => t(k) + (d < 0 ? t('lowShort') : t('highShort'))).join(t('listSep')))]);
   [['vHrv', -1, 3, 'alertHrvLow'], ['vRhr', 1, 3, 'alertRhrHigh'], ['vTemp', 1, 2, 'alertTempHigh']].forEach(([k, d, min, key]) => {
     const n = streakOf(F[k], d); if(n >= min) out.push(['warn', t(key).replace('{n}', n)]);
   });
@@ -413,8 +413,8 @@ function healthAlerts(){
   });
   const nights = ouraRows.filter(r => num(r['Total Sleep (min)'])).slice(-5), short = nights.filter(r => num(r['Total Sleep (min)']) < 360).length;
   if(nights.length >= 3 && short >= 3) out.push(['warn', t('alertShortSleep').replace('{n}', short).replace('{m}', nights.length)]);
-  const sr = stressRows(); let sn = 0;
-  for(let i = sr.length - 1; i >= 0 && sr[i].st >= 60 && sr[i].st >= 2 * sr[i].rc; i--) sn++;
+  const rated = ouraRows.filter(r => (r['Day Summary'] || '').trim()); let sn = 0;
+  for(let i = rated.length - 1; i >= 0 && rated[i]['Day Summary'].trim().toLowerCase() === 'stressful'; i--) sn++;
   if(sn >= 3) out.push(['warn', t('alertStress').replace('{n}', sn)]);
   return out;
 }
@@ -436,9 +436,13 @@ function renderStressRecovery(){
   const win = rows.slice(-healthRange), dense = win.length > 10, every = Math.ceil(win.length / 8);
   const max = Math.max(60, ...win.map(x => Math.max(x.st, x.rc))), H = 54;
   const sum = k => win.reduce((a, x) => a + x[k], 0), st = sum('st'), rc = sum('rc'), days = win.length;
-  const verdict = st >= 2 * rc && st >= 60 * days ? 'stressHeavy' : rc >= st ? 'stressBalanced' : 'stressMild';
+  // the judgement comes from Oura's own daily rating (Day Summary), counted over the same window
+  const winRows = ouraRows.slice(-healthRange), counts = {};
+  winRows.forEach(r => { const d = (r['Day Summary'] || '').trim().toLowerCase(); counts[d] = (counts[d] || 0) + 1; });
+  const rated = ['stressful', 'normal', 'restored', 'relaxed'].filter(k => counts[k]).map(k => t('dayCount').replace('{label}', t('day_' + k)).replace('{k}', counts[k]));
+  const verdictHtml = t('ouraDayCounts').replace('{n}', winRows.length) + rated.join(t('listSep')) + (counts[''] ? `<span class="sub"> · ${t('dayNone').replace('{m}', counts[''])}</span>` : '');
   el.innerHTML = `
-    <div class="health-verdict">${t(verdict)}</div>
+    <div class="health-verdict">${verdictHtml}</div>
     <div class="sr-split"><span style="flex:${st || 0.001}; background:var(--stress)"></span><span style="flex:${rc || 0.001}; background:var(--recovery)"></span></div>
     <div class="sr-legend"><span><i style="background:var(--stress)"></i>${t('stressLabel')} <b>${fmtMin(st)}</b> <span class="sub">${t('perDay').replace('{v}', fmtMin(st / days))}</span></span><span><i style="background:var(--recovery)"></i>${t('recoveryLabel')} <b>${fmtMin(rc)}</b> <span class="sub">${t('perDay').replace('{v}', fmtMin(rc / days))}</span></span><span class="sub">${t('lastNDays').replace('{n}', days)}</span></div>
     <div class="health-sub-title">${t('dayByDay')}</div>
