@@ -932,14 +932,27 @@ async function kvGet(key){
   const res = await fetch('/api/storage/' + encodeURIComponent(key));
   if(!res.ok) throw new Error('kv get failed');
   const text = await res.text();
+  kvRevs[key] = res.headers.get('ETag'); // 保存时带回这个版本号，云端已被别处改过就会被拒（409）
   return text === 'null' ? null : JSON.parse(text);
 }
-async function kvSet(key, value){
-  const res = await fetch('/api/storage/' + encodeURIComponent(key), {
-    method: 'PUT',
-    body: JSON.stringify(value)
-  });
-  return res.ok;
+const kvRevs = {};
+const kvChains = {};
+// 同一个 key 的保存排队执行：上一次返回新版本号后再发下一次，否则同一页面连续两次保存会互相冲突。
+// 返回 true（成功）/ false（可重试的失败）/ 'conflict'（云端已被其他设备或标签页改过）。
+function kvSet(key, value){
+  const run = async () => {
+    const res = await fetch('/api/storage/' + encodeURIComponent(key), {
+      method: 'PUT',
+      headers: { 'If-Match': kvRevs[key] || '"0"' },
+      body: JSON.stringify(value)
+    });
+    if(res.status === 409) return 'conflict';
+    if(res.ok) kvRevs[key] = res.headers.get('ETag');
+    return res.ok;
+  };
+  const p = (kvChains[key] || Promise.resolve()).then(run, run);
+  kvChains[key] = p.catch(() => {});
+  return p;
 }
 
 // 带重试的读取：网络抖动时不放弃，避免用空壳数据静默覆盖云端真实数据。
@@ -1034,6 +1047,11 @@ async function trySave(key, dataObj, label){
   for(let attempt=0; attempt<3; attempt++){
     try{
       const ok = await kvSet(key, dataObj);
+      if(ok === 'conflict'){
+        // 不重试、不覆盖：刷新会拿到云端最新版本，本页这次的改动不会保存
+        showToast('云端数据已在其他设备/标签页更新，这次修改没有保存，请刷新页面后再改');
+        return false;
+      }
       if(ok) return true;
     }catch(e){
       console.error(label+' save attempt '+(attempt+1)+' failed', e);

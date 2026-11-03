@@ -8,9 +8,10 @@ preview_urls = false
 [triggers]
 crons = ["0 17 * * *"]
 
-[[kv_namespaces]]
-binding = "SOURCE"
-id = "38fe44dba6834447baa6dbf88f6f34a9"
+[[d1_databases]]
+binding = "DB"
+database_name = "mori-kanban"
+database_id = "5a766285-37de-4ad2-b3fb-9ec9d0b0f1e9"
 
 [[kv_namespaces]]
 binding = "BACKUPS"

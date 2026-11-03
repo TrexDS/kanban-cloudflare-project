@@ -61,22 +61,55 @@ test('PUT needs same Origin', async () => {
   assert.equal((await call(t, { method: 'PUT', origin: ORIGIN })).status, 200);
 });
 
-// storage handler
-const kv = () => { const m = new Map(); return { m, get: async (k) => m.get(k) ?? null, put: async (k, v) => m.set(k, v) }; };
-const put = (key, body, KANBAN_KV) => onRequestPut({ params: { key }, env: { KANBAN_KV }, request: new Request('https://x/', { method: 'PUT', body }) });
+// storage handler (D1 + If-Match CAS)
+import { d1 } from './d1-mock.mjs';
+const get = (key, DB) => onRequestGet({ params: { key }, env: { DB } });
+const put = (key, body, DB, ifMatch = '"0"') => onRequestPut({ params: { key }, env: { DB },
+  request: new Request('https://x/', { method: 'PUT', body, headers: ifMatch === null ? {} : { 'If-Match': ifMatch } }) });
+const count = (DB) => DB.db.prepare('SELECT COUNT(*) n FROM docs').get().n;
 
 test('storage rejects unknown keys', async () => {
-  const k = kv();
-  assert.equal((await onRequestGet({ params: { key: 'other' }, env: { KANBAN_KV: k } })).status, 404);
-  assert.equal((await put('other', '{}', k)).status, 404);
+  const DB = d1();
+  assert.equal((await get('other', DB)).status, 404);
+  assert.equal((await put('other', '{}', DB)).status, 404);
 });
 test('storage validates body', async () => {
-  const k = kv();
-  assert.equal((await put('daily-log-data', 'not json', k)).status, 400);
-  assert.equal((await put('daily-log-data', 'null', k)).status, 400);
-  assert.equal((await put('daily-log-data', '[1]', k)).status, 400);
-  assert.equal((await put('daily-log-data', JSON.stringify({ a: 'x'.repeat(600 * 1024) }), k)).status, 413);
-  assert.equal(k.m.size, 0);
-  assert.equal((await put('daily-log-data', '{"entries":{}}', k)).status, 200);
-  assert.equal(await (await onRequestGet({ params: { key: 'daily-log-data' }, env: { KANBAN_KV: k } })).text(), '{"entries":{}}');
+  const DB = d1();
+  assert.equal((await put('daily-log-data', 'not json', DB)).status, 400);
+  assert.equal((await put('daily-log-data', 'null', DB)).status, 400);
+  assert.equal((await put('daily-log-data', '[1]', DB)).status, 400);
+  assert.equal((await put('daily-log-data', JSON.stringify({ a: 'x'.repeat(600 * 1024) }), DB)).status, 413);
+  assert.equal(count(DB), 0);
+});
+test('missing row reads as null with rev 0, then create and read back', async () => {
+  const DB = d1();
+  const r0 = await get('daily-log-data', DB);
+  assert.equal(await r0.text(), 'null');
+  assert.equal(r0.headers.get('ETag'), '"0"');
+  const w = await put('daily-log-data', '{"entries":{}}', DB, r0.headers.get('ETag'));
+  assert.equal(w.status, 200);
+  assert.equal(w.headers.get('ETag'), '"1"');
+  const r1 = await get('daily-log-data', DB);
+  assert.equal(await r1.text(), '{"entries":{}}');
+  assert.equal(r1.headers.get('ETag'), '"1"');
+});
+test('PUT without If-Match is refused (stale client)', async () => {
+  const DB = d1({ 'daily-log-data': '{"keep":1}' });
+  assert.equal((await put('daily-log-data', '{}', DB, null)).status, 428);
+  assert.equal((await put('daily-log-data', '{}', DB, '*')).status, 428);
+  assert.equal(await (await get('daily-log-data', DB)).text(), '{"keep":1}');
+});
+test('stale rev gets 409 and does not overwrite', async () => {
+  const DB = d1({ 'thread-kanban-data': '{"v":"a"}' }); // rev 1
+  assert.equal((await put('thread-kanban-data', '{"v":"b"}', DB, '"1"')).status, 200); // device B → rev 2
+  assert.equal((await put('thread-kanban-data', '{"v":"c"}', DB, '"1"')).status, 409); // device A, stale
+  assert.equal((await put('thread-kanban-data', '{"v":"c"}', DB, '"0"')).status, 409); // "create" over existing
+  const r = await get('thread-kanban-data', DB);
+  assert.equal(await r.text(), '{"v":"b"}');
+  assert.equal(r.headers.get('ETag'), '"2"');
+});
+test('concurrent writers on the same rev: exactly one wins', async () => {
+  const DB = d1({ 'thread-kanban-data': '{}' });
+  const res = await Promise.all([...Array(10)].map((_, i) => put('thread-kanban-data', `{"i":${i}}`, DB, '"1"')));
+  assert.deepEqual(res.map((r) => r.status).sort(), [200, ...Array(9).fill(409)]);
 });

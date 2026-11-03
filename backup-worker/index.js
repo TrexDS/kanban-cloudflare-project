@@ -1,4 +1,4 @@
-// Daily snapshot of the kanban KV into KANBAN_KV_BACKUPS as "<YYYY-MM-DD>/<key>",
+// Daily snapshot of the kanban docs (D1 table `docs`) into KANBAN_KV_BACKUPS as "<YYYY-MM-DD>/<key>",
 // with sha256/bytes in metadata and a "<YYYY-MM-DD>/_manifest". No fetch handler: cron only.
 const KEYS = ['thread-kanban-data', 'job-pipeline-data', 'daily-log-data'];
 const KEEP_SECONDS = 35 * 24 * 3600;
@@ -11,7 +11,7 @@ export async function snapshot(env, now = new Date()) {
   const day = now.toISOString().slice(0, 10);
   const manifest = { day, taken_at: now.toISOString(), keys: [] };
   for (const key of KEYS) {
-    const value = await env.SOURCE.get(key);
+    const value = await env.DB.prepare('SELECT body FROM docs WHERE key = ?').bind(key).first('body');
     // A missing source key is recorded, never written as an empty backup.
     if (value === null) { manifest.keys.push({ key, missing: true }); continue; }
     const meta = { sha256: await sha256(value), bytes: new TextEncoder().encode(value).length };
